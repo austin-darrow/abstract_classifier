@@ -1,0 +1,29 @@
+# Vista (TACC) configuration overrides
+# Inherits from default.yaml, overrides specific values for HPC context
+#
+# Usage:
+#   python -m cip_classifier classify --config config/default.yaml --config config/vista.yaml
+#
+# On Vista, set paths relative to $SCRATCH or $WORK:
+#   python -m cip_classifier classify --config config/vista.yaml --set paths.abstracts_excel=$SCRATCH/data/database_abstracts.xlsx
+
+models:
+  # Use same model for both index and query (critical for accuracy)
+  # Larger models feasible on Vista H200 (96 GB HBM3):
+  #   - BAAI/bge-large-en-v1.5 (335M params, 1024-dim)
+  #   - intfloat/e5-mistral-7b-instruct (7B params, 4096-dim)
+  #   - nvidia/NV-Embed-v2 (7B params, 4096-dim)
+  #   - Alibaba-NLP/gte-Qwen2-7B-instruct (7B params, 3584-dim)
+  index_encoder: BAAI/bge-large-en-v1.5
+  query_encoder: BAAI/bge-large-en-v1.5
+  query_prefix: ""
+
+classify:
+  # Larger batch size for H200 GPU (96 GB HBM3)
+  batch_size: 128
+
+index:
+  batch_size: 128
+
+runtime:
+  device: cuda

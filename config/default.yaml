@@ -1,0 +1,91 @@
+# CIP Classifier Pipeline Configuration
+# All paths are relative to the project root unless absolute
+
+paths:
+  # Input data
+  taxonomy_excel: data/raw/SEDCIP24_TACC.xlsx
+  abstracts_excel: data/raw/database_abstracts.xlsx
+
+  # Processed taxonomy
+  taxonomy_json: data/processed/SEDCIP24.json
+  broad_fields_json: data/processed/broad_fields.json
+  major_fields_json: data/processed/major_fields.json
+  detailed_fields_json: data/processed/detailed_fields.json
+
+  # Index artifacts
+  faiss_index: output/index/cip_index.faiss
+  index_metadata: output/index/cip_metadata.json
+
+  # Classification output
+  classification_results: output/results/classification_results.json
+
+  # Evaluation output
+  evaluation_report: output/reports/evaluation_report.json
+  disagreements: output/reports/disagreements.json
+
+models:
+  # Model used to embed CIP taxonomy entries (for index)
+  index_encoder: shahafvl/bge-reasoner-scientific-parent-noprompt
+
+  # Model used to embed query abstracts
+  query_encoder: shahafvl/bge-reasoner-scientific-parent-noprompt
+
+  # Prefix prepended to abstracts before encoding (some models require this)
+  query_prefix: ""
+
+parse:
+  # Excel sheet name containing the taxonomy
+  sheet_name: SEDCIP24
+
+  # Columns to drop from the raw taxonomy
+  drop_columns:
+    - SED_CIPCode
+    - CIP Code
+    - Broad_Field_Code
+    - Major_Field_code
+    - Detailed_Field_Code
+    - Trend_Broad_Field_Code
+    - Trend_Major_Field_Code
+    - End_year
+    - Active
+    - Field_Area
+    - Trend_Broad_Field_Label
+    - Trend_Major_Field_Label
+    - Field_Area_Label
+
+index:
+  # Batch size for encoding taxonomy entries
+  batch_size: 64
+
+  # Template for enriched text (Python format string)
+  # Available keys: Broad_Field_label, Major_Field_label, Detailed_Field_label,
+  #                 SED_CIPTitle, CIPDefinition
+  text_template: >-
+    Broad field: {Broad_Field_label} |
+    Major field: {Major_Field_label} |
+    Detailed field: {Detailed_Field_label} |
+    {SED_CIPTitle}: {CIPDefinition}
+
+classify:
+  # Number of nearest neighbors to retrieve
+  top_k: 10
+
+  # Batch size for encoding abstracts (overridden by runtime.batch_size if set)
+  batch_size: 32
+
+evaluate:
+  # Agreement ratio thresholds for confidence breakdown
+  confidence_thresholds:
+    - 0.7
+    - 0.5
+    - 0.3
+
+  # Number of top confused pairs to report
+  top_confused_pairs: 20
+
+runtime:
+  # Device: auto, cuda, cpu
+  device: auto
+
+  # Override batch size for all steps (null = use per-step defaults)
+  batch_size: null

@@ -1,2 +1,28 @@
-.venv
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
 *venv*
+
+# Pipeline outputs
+output/
+
+# Raw data (large Excel files)
+data/raw/*.xlsx
+
+# FAISS index (large binary, regenerable)
+*.faiss
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SLURM logs
+slurm-*.out
