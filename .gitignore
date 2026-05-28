@@ -11,7 +11,7 @@ build/
 output/
 
 # Raw data (large Excel files)
-data/raw/*.xlsx
+# data/raw/*.xlsx
 
 # FAISS index (large binary, regenerable)
 *.faiss
