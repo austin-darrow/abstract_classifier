@@ -47,6 +47,12 @@ def run(cfg: PipelineConfig, project_root: Path) -> None:
         mode="query",
     )
 
+    # Save embeddings for downstream visualization
+    embeddings_path = cfg.resolve_path(cfg.paths.embeddings_npy, project_root)
+    embeddings_path.parent.mkdir(parents=True, exist_ok=True)
+    np.save(embeddings_path, embeddings)
+    print(f"Saved embeddings to {embeddings_path}")
+
     # Query FAISS
     top_k = cfg.classify.top_k
     print(f"Querying top-{top_k} nearest neighbors...")

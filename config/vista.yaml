@@ -15,8 +15,8 @@ models:
   #   - nvidia/NV-Embed-v2 (7B params, 4096-dim)
   #   - Alibaba-NLP/gte-Qwen2-7B-instruct (7B params, 3584-dim)
   #   - shahafvl/bge-reasoner-scientific-parent-noprompt (8B params, 4096-dim)
-  index_encoder: shahafvl/bge-reasoner-scientific-parent-noprompt
-  query_encoder: shahafvl/bge-reasoner-scientific-parent-noprompt
+  index_encoder: BAAI/bge-large-en-v1.5
+  query_encoder: BAAI/bge-large-en-v1.5
   query_prefix: ""
 
 classify:

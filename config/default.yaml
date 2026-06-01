@@ -18,10 +18,12 @@ paths:
 
   # Classification output
   classification_results: output/results/classification_results.json
+  embeddings_npy: output/index/abstract_embeddings.npy
 
   # Evaluation output
   evaluation_report: output/reports/evaluation_report.json
   disagreements: output/reports/disagreements.json
+  visualization_plot: output/reports/embedding_visualization.png
 
 models:
   # Model used to embed CIP taxonomy entries (for index)
@@ -82,6 +84,17 @@ evaluate:
 
   # Number of top confused pairs to report
   top_confused_pairs: 20
+
+visualize:
+  # Dimensionality reduction method: umap or tsne
+  method: umap
+
+  # UMAP parameters
+  n_neighbors: 15
+  min_dist: 0.1
+
+  # t-SNE parameters (only used when method=tsne)
+  perplexity: 30.0
 
 runtime:
   # Device: auto, cuda, cpu

@@ -93,6 +93,18 @@ def evaluate(cfg, project_root) -> None:
     run(cfg, project_root)
 
 
+@cli.command()
+@_config_options
+@click.option("--method", type=click.Choice(["umap", "tsne"]), default=None,
+              help="Dimensionality reduction method (overrides config).")
+def visualize(cfg, project_root, method) -> None:
+    """Step 4: Visualize embedding space colored by broad field."""
+    if method:
+        cfg.visualize.method = method
+    from .visualize import run
+    run(cfg, project_root)
+
+
 @cli.command("run-all")
 @_config_options
 def run_all(cfg, project_root) -> None:

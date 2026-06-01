@@ -21,6 +21,8 @@ class PathsConfig(BaseModel):
     classification_results: str = "output/results/classification_results.json"
     evaluation_report: str = "output/reports/evaluation_report.json"
     disagreements: str = "output/reports/disagreements.json"
+    embeddings_npy: str = "output/index/abstract_embeddings.npy"
+    visualization_plot: str = "output/reports/embedding_visualization.png"
 
 
 class ModelsConfig(BaseModel):
@@ -54,6 +56,13 @@ class EvaluateConfig(BaseModel):
     top_confused_pairs: int = 20
 
 
+class VisualizeConfig(BaseModel):
+    method: str = "umap"  # "umap" or "tsne"
+    n_neighbors: int = 15
+    min_dist: float = 0.1
+    perplexity: float = 30.0
+
+
 class RuntimeConfig(BaseModel):
     device: str = "auto"
     batch_size: Optional[int] = None
@@ -66,6 +75,7 @@ class PipelineConfig(BaseModel):
     index: IndexConfig = Field(default_factory=IndexConfig)
     classify: ClassifyConfig = Field(default_factory=ClassifyConfig)
     evaluate: EvaluateConfig = Field(default_factory=EvaluateConfig)
+    visualize: VisualizeConfig = Field(default_factory=VisualizeConfig)
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
 
     def resolve_path(self, path_str: str, project_root: Path) -> Path:
