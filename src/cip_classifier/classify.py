@@ -43,7 +43,8 @@ def run(cfg: PipelineConfig, project_root: Path) -> None:
     batch_size = cfg.runtime.batch_size or cfg.classify.batch_size
     print(f"Encoding abstracts (batch_size={batch_size})...")
     embeddings = encode_texts(
-        model, abstracts, batch_size=batch_size, prefix=cfg.models.query_prefix
+        model, abstracts, batch_size=batch_size, prefix=cfg.models.query_prefix,
+        mode="query",
     )
 
     # Query FAISS

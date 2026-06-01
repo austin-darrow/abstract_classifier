@@ -22,6 +22,7 @@ def encode_texts(
     batch_size: int,
     prefix: str = "",
     show_progress: bool = True,
+    mode: str = "default",
 ) -> np.ndarray:
     """Encode a list of texts into normalized embeddings.
 
@@ -31,6 +32,9 @@ def encode_texts(
         batch_size: Encoding batch size.
         prefix: Optional prefix prepended to each text before encoding.
         show_progress: Whether to show a progress bar.
+        mode: Encoding mode - "default", "query", or "document".
+              Use "query" for abstracts and "document" for taxonomy/CIP texts
+              when the model supports asymmetric encoding (e.g. encode_query/encode_document).
 
     Returns:
         Normalized embeddings as float32 numpy array of shape (N, dim).
@@ -38,12 +42,19 @@ def encode_texts(
     if prefix:
         texts = [prefix + t for t in texts]
 
-    embeddings = model.encode(
-        texts,
+    encode_kwargs = dict(
         normalize_embeddings=True,
         show_progress_bar=show_progress,
         batch_size=batch_size,
     )
+
+    if mode == "query" and hasattr(model, "encode_query"):
+        embeddings = model.encode_query(texts, **encode_kwargs)
+    elif mode == "document" and hasattr(model, "encode_document"):
+        embeddings = model.encode_document(texts, **encode_kwargs)
+    else:
+        embeddings = model.encode(texts, **encode_kwargs)
+
     return np.array(embeddings, dtype=np.float32)
 
 

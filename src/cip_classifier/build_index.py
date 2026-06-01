@@ -43,7 +43,7 @@ def run(cfg: PipelineConfig, project_root: Path) -> None:
 
     batch_size = cfg.runtime.batch_size or cfg.index.batch_size
     print(f"Encoding taxonomy entries (batch_size={batch_size})...")
-    embeddings = encode_texts(model, enriched_texts, batch_size=batch_size)
+    embeddings = encode_texts(model, enriched_texts, batch_size=batch_size, mode="document")
     print(f"Embeddings shape: {embeddings.shape}")
 
     # Build and save FAISS index
