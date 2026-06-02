@@ -38,6 +38,9 @@ pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu12
 cd "$(dirname "$0")/.."
 pip3 install -e .
 
+# Install generation dependencies (SGLang for inference server, httpx for client)
+pip3 install "sglang[all]" httpx
+
 echo ""
 echo "=== Setup complete ==="
 echo "Activate with: source $VENV_DIR/bin/activate"

@@ -63,6 +63,33 @@ class VisualizeConfig(BaseModel):
     perplexity: float = 30.0
 
 
+class GenerateConfig(BaseModel):
+    model: str = "deepseek-ai/DeepSeek-R1"
+    server_url: str = "http://localhost:30000"
+    temperature: float = 0.6
+    max_tokens: int = 1024
+    samples_per_field: int = 10
+    output_dir: str = "data/generated"
+    seed: int = 42
+    batch_size: int = 16
+    train_ratio: float = 0.8
+    min_abstract_length: int = 150
+    max_abstract_length: int = 800
+    prompt_template: str = (
+        "<think>\n"
+        "You are an expert researcher. Given the following academic field taxonomy, "
+        "generate a realistic research abstract (300-500 words) that would be "
+        "classified under the specified Major Field.\n\n"
+        "Broad Field: {broad_field}\n"
+        "Major Field: {major_field}\n"
+        "Related Detailed Fields:\n{detailed_fields}\n\n"
+        "Focus area: {focus_area}\n\n"
+        "Generate ONLY the abstract text. Do not include a title, author names, "
+        "or any metadata. The abstract should read like a real published research "
+        "abstract with background, methods, results, and conclusions."
+    )
+
+
 class RuntimeConfig(BaseModel):
     device: str = "auto"
     batch_size: Optional[int] = None
@@ -76,6 +103,7 @@ class PipelineConfig(BaseModel):
     classify: ClassifyConfig = Field(default_factory=ClassifyConfig)
     evaluate: EvaluateConfig = Field(default_factory=EvaluateConfig)
     visualize: VisualizeConfig = Field(default_factory=VisualizeConfig)
+    generate: GenerateConfig = Field(default_factory=GenerateConfig)
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
 
     def resolve_path(self, path_str: str, project_root: Path) -> Path:

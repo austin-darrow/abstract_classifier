@@ -96,6 +96,36 @@ visualize:
   # t-SNE parameters (only used when method=tsne)
   perplexity: 30.0
 
+generate:
+  # Model served by SGLang/vLLM inference server
+  model: deepseek-ai/DeepSeek-R1
+
+  # SGLang server endpoint (set by slurm/launch_server.sbatch)
+  server_url: http://localhost:30000
+
+  # Sampling parameters (DeepSeek-R1 recommends 0.5-0.7)
+  temperature: 0.6
+  max_tokens: 1024
+
+  # Number of abstracts to generate per major field
+  samples_per_field: 10
+
+  # Output directory for generated datasets
+  output_dir: data/generated
+
+  # Reproducibility
+  seed: 42
+
+  # Concurrent requests to the inference server
+  batch_size: 16
+
+  # Train/test split ratio
+  train_ratio: 0.8
+
+  # Length filters (word count)
+  min_abstract_length: 150
+  max_abstract_length: 800
+
 runtime:
   # Device: auto, cuda, cpu
   device: auto

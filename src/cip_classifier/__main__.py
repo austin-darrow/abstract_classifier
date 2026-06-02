@@ -139,5 +139,33 @@ def run_all(cfg, project_root) -> None:
     click.echo("=" * 60)
 
 
+@cli.command()
+@_config_options
+@click.option("--samples", type=int, default=None,
+              help="Override samples_per_field from config.")
+@click.option("--server-url", type=str, default=None,
+              help="Override inference server URL.")
+def generate(cfg, project_root, samples, server_url) -> None:
+    """Generate synthetic abstracts using LLM inference server."""
+    if samples is not None:
+        cfg.generate.samples_per_field = samples
+    if server_url is not None:
+        cfg.generate.server_url = server_url
+    from .generate import run
+    run(cfg, project_root)
+
+
+@cli.command()
+@_config_options
+@click.option("--train-ratio", type=float, default=None,
+              help="Override train/test split ratio (default: 0.8).")
+def split(cfg, project_root, train_ratio) -> None:
+    """Split generated abstracts into train/test sets (stratified by field)."""
+    if train_ratio is not None:
+        cfg.generate.train_ratio = train_ratio
+    from .generate import run_split
+    run_split(cfg, project_root)
+
+
 if __name__ == "__main__":
     cli()
