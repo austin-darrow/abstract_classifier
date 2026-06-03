@@ -79,9 +79,9 @@ SERVER_PID=$!
 # Wait for server readiness
 # ---------------------------------------------------------------------------
 
-MAX_WAIT=600
+MAX_WAIT=1800
 ELAPSED=0
-INTERVAL=10
+INTERVAL=15
 
 echo "Waiting for server at $SERVER_URL ..."
 

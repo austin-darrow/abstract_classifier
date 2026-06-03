@@ -129,7 +129,7 @@ SERVER_PID=$!
 # ---------------------------------------------------------------------------
 
 SERVER_URL="http://${MASTER_NODE}:${SERVER_PORT}"
-MAX_WAIT=900  # 15 minutes for model loading
+MAX_WAIT=1800  # 15 minutes for model loading
 ELAPSED=0
 INTERVAL=15
 
