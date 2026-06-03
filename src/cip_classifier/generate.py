@@ -106,10 +106,22 @@ async def wait_for_server(base_url: str, max_wait: int = 600, interval: int = 15
     )
 
 
+async def get_served_model_name(base_url: str) -> str:
+    """Query the server to discover the actual served model name."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(f"{base_url}/v1/models")
+        resp.raise_for_status()
+        data = resp.json()
+        model_id = data["data"][0]["id"]
+        logger.info("Served model: %s", model_id)
+        return model_id
+
+
 async def call_server(
     prompt: str,
     cfg: PipelineConfig,
     client: httpx.AsyncClient,
+    served_model: str,
 ) -> str | None:
     """Send a completion request to the OpenAI-compatible API.
 
@@ -117,7 +129,7 @@ async def call_server(
     """
     url = f"{cfg.generate.server_url}/v1/completions"
     payload = {
-        "model": cfg.generate.model,
+        "model": served_model,
         "prompt": prompt,
         "max_tokens": cfg.generate.max_tokens,
         "temperature": cfg.generate.temperature,
@@ -182,6 +194,7 @@ async def generate_batch(
     cfg: PipelineConfig,
     semaphore: asyncio.Semaphore,
     debug_log: Path,
+    served_model: str,
 ) -> list[dict]:
     """Generate a batch of abstracts concurrently (bounded by semaphore)."""
     results = []
@@ -191,7 +204,7 @@ async def generate_batch(
         async def _generate_one(item: dict) -> dict | None:
             async with semaphore:
                 t0 = time.time()
-                raw = await call_server(item["prompt"], cfg, client)
+                raw = await call_server(item["prompt"], cfg, client, served_model)
                 elapsed = time.time() - t0
 
                 # Build debug entry
@@ -234,7 +247,7 @@ async def generate_batch(
                     "major_field": item["major_field"],
                     "broad_field": item["broad_field"],
                     "focus_area": item["focus_area"],
-                    "model": cfg.generate.model,
+                    "model": served_model,
                     "temperature": cfg.generate.temperature,
                 }
 
@@ -296,6 +309,9 @@ async def _run_generation(cfg: PipelineConfig, project_root: Path) -> None:
     """Async generation loop."""
     # Wait for server
     await wait_for_server(cfg.generate.server_url)
+
+    # Discover the actual model name served by the server
+    served_model = await get_served_model_name(cfg.generate.server_url)
 
     # Load taxonomy
     taxonomy = load_taxonomy(cfg, project_root)
@@ -365,7 +381,7 @@ async def _run_generation(cfg: PipelineConfig, project_root: Path) -> None:
     all_results = list(existing)
     for start in range(0, len(prompts), batch_size):
         batch = prompts[start : start + batch_size]
-        results = await generate_batch(batch, cfg, semaphore, debug_log)
+        results = await generate_batch(batch, cfg, semaphore, debug_log, served_model)
         all_results.extend(results)
 
         # Checkpoint after each batch
