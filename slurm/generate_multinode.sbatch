@@ -38,6 +38,13 @@ export HF_HOME="${SCRATCH}/.cache/huggingface"
 export TRANSFORMERS_CACHE="${HF_HOME}/hub"
 export HUGGINGFACE_HUB_CACHE="${HF_HOME}/hub"
 
+# Prevent any JIT caches from writing to $HOME (quota limited)
+export FLASHINFER_CACHE_DIR="${SCRATCH}/.cache/flashinfer"
+export TRITON_CACHE_DIR="${SCRATCH}/.cache/triton"
+
+# Disable flashinfer sampler — use PyTorch-native sampling instead
+export VLLM_USE_FLASHINFER_SAMPLER=0
+
 # NCCL settings for Vista InfiniBand
 export NCCL_DEBUG=WARN
 export NCCL_IB_GID_INDEX=3

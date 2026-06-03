@@ -43,6 +43,14 @@ export TRANSFORMERS_CACHE="${HF_HOME}/hub"
 export HUGGINGFACE_HUB_CACHE="${HF_HOME}/hub"
 export CUDA_VISIBLE_DEVICES=0
 
+# Prevent any JIT caches from writing to $HOME (quota limited)
+export FLASHINFER_CACHE_DIR="${SCRATCH}/.cache/flashinfer"
+export TRITON_CACHE_DIR="${SCRATCH}/.cache/triton"
+
+# Disable flashinfer sampler — use PyTorch-native sampling instead
+# (avoids JIT compilation issues with Vista's module environment)
+export VLLM_USE_FLASHINFER_SAMPLER=0
+
 # Configurable model (default: 32B distill for single-node)
 MODEL="${MODEL:-deepseek-ai/DeepSeek-R1-Distill-Qwen-32B}"
 SERVER_PORT=30000
