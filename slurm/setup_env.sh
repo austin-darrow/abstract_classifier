@@ -42,12 +42,8 @@ echo "Venv Pip:    $(which pip3)"
 # Upgrade pip
 pip3 install --upgrade pip
 
-# Install SGLang first (it pulls compatible torch + CUDA versions automatically)
-pip3 install "sglang[all]"
-
-# Reinstall torchvision to match whatever torch version sglang installed
-pip3 install --force-reinstall torchvision --no-deps
-pip3 install torchvision
+# Install vLLM (pulls compatible torch + CUDA automatically)
+pip3 install --no-cache-dir vllm
 
 # Install the project in editable mode (httpx and other deps)
 cd "$(dirname "$0")/.."

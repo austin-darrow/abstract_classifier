@@ -1,6 +1,6 @@
 """Synthetic abstract generation using a large LLM (DeepSeek-R1).
 
-This module connects to an SGLang/vLLM inference server and generates
+This module connects to a vLLM inference server and generates
 realistic research abstracts for each major field in the CIP taxonomy.
 
 Usage:

@@ -23,7 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
 viz = ["umap-learn>=0.5", "matplotlib>=3.7", "scikit-learn>=1.3"]
-generate = ["sglang[all]"]
+generate = ["vllm"]
 
 [project.scripts]
 cip-classifier = "cip_classifier.__main__:cli"

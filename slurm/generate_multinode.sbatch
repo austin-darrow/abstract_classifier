@@ -71,9 +71,11 @@ echo "============================================="
 
 # ---------------------------------------------------------------------------
 # Create the per-node launch script (Vista MPI pattern)
+# vLLM uses Ray for multi-node; we launch a Ray head on rank 0 and
+# workers on other ranks, then start vLLM on the head.
 # ---------------------------------------------------------------------------
 
-LAUNCH_SCRIPT=$(mktemp /tmp/sglang_worker_XXXX.sh)
+LAUNCH_SCRIPT=$(mktemp /tmp/vllm_worker_XXXX.sh)
 chmod +x "$LAUNCH_SCRIPT"
 
 cat > "$LAUNCH_SCRIPT" << 'WORKER_EOF'
@@ -81,38 +83,41 @@ cat > "$LAUNCH_SCRIPT" << 'WORKER_EOF'
 HOST=$1
 NODES=$2
 SERVER_PORT=$3
+RAY_PORT=6379
 
 # MPI sets OMPI_COMM_WORLD_RANK for each process
 LOCAL_RANK=${OMPI_COMM_WORLD_RANK}
 
-echo "[Rank $LOCAL_RANK] $(hostname) starting SGLang worker..."
+echo "[Rank $LOCAL_RANK] $(hostname) starting..."
 
-ARGS=(
-    --model-path deepseek-ai/DeepSeek-R1
-    --tp "$NODES"
-    --dist-init-addr "${HOST}:5000"
-    --nnodes "$NODES"
-    --node-rank "$LOCAL_RANK"
-    --trust-remote-code
-    --mem-fraction-static 0.88
-    --max-total-tokens 32768
-    --quantization fp8
-)
-
-# Only rank 0 (master) exposes the HTTP server
 if [ "$LOCAL_RANK" -eq 0 ]; then
-    ARGS+=(--host 0.0.0.0 --port "$SERVER_PORT")
-fi
+    # Head node: start Ray head + vLLM server
+    ray start --head --port=$RAY_PORT --num-gpus=1 --block &
+    sleep 10  # Let Ray head initialize
 
-python3 -m sglang.launch_server "${ARGS[@]}"
+    echo "[Rank 0] Launching vLLM server..."
+    python3 -m vllm.entrypoints.openai.api_server \
+        --model deepseek-ai/DeepSeek-R1 \
+        --tensor-parallel-size "$NODES" \
+        --trust-remote-code \
+        --gpu-memory-utilization 0.88 \
+        --max-model-len 32768 \
+        --quantization fp8 \
+        --host 0.0.0.0 \
+        --port "$SERVER_PORT"
+else
+    # Worker nodes: connect to Ray head
+    echo "[Rank $LOCAL_RANK] Joining Ray cluster at ${HOST}:${RAY_PORT}..."
+    ray start --address="${HOST}:${RAY_PORT}" --num-gpus=1 --block
+fi
 WORKER_EOF
 
 # ---------------------------------------------------------------------------
-# Launch SGLang server across all nodes via MPI
+# Launch vLLM across all nodes via MPI
 # ---------------------------------------------------------------------------
 
 echo ""
-echo ">>> Launching SGLang server across $NUM_NODES nodes via MPI..."
+echo ">>> Launching vLLM server across $NUM_NODES nodes via MPI..."
 echo ""
 
 # Launch in background so we can run the client on this node after server is ready
@@ -187,5 +192,6 @@ echo ""
 echo ">>> Shutting down inference server..."
 kill $SERVER_PID 2>/dev/null || true
 wait $SERVER_PID 2>/dev/null || true
+ray stop 2>/dev/null || true
 rm -f "$LAUNCH_SCRIPT"
 echo "Done."

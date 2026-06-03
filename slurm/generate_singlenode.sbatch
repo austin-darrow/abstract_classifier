@@ -8,22 +8,23 @@
 #SBATCH -t 08:00:00                 # 8 hours
 #SBATCH --mail-type=end,fail
 #
-# Single-node generation job for SMALLER models that fit on 1 H100:
-#   - DeepSeek-R1-Distill-Qwen-32B  (fits in 1 H100 at BF16)
-#   - DeepSeek-R1-Distill-Qwen-14B  (fits in 1 H100 easily)
+# Single-node generation job for SMALLER models that fit on 1 GH200 (120GB):
+#   - DeepSeek-R1-Distill-Qwen-32B  (fits easily)
+#   - DeepSeek-R1-Distill-Llama-70B (fits at BF16, ~140GB with KV cache)
+#   - DeepSeek-R1-Distill-Qwen-14B  (fits easily)
 #
 # For the full DeepSeek-R1 (671B, 8 nodes), use:
-#   sbatch slurm/launch_server.sbatch
+#   sbatch slurm/generate_multinode.sbatch
 #
-# This script launches a local SGLang server on the single allocated node,
+# This script launches a vLLM server on the single allocated node,
 # waits for it to be ready, then runs generation — all within one job.
 #
 # Usage:
-#   sbatch slurm/generate.sbatch
-#   sbatch -A <allocation> slurm/generate.sbatch
+#   sbatch slurm/generate_singlenode.sbatch
+#   sbatch -A <allocation> slurm/generate_singlenode.sbatch
 #
 # Override model or samples:
-#   sbatch --export=ALL,MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,SAMPLES_PER_FIELD=50 slurm/generate.sbatch
+#   sbatch --export=ALL,MODEL=deepseek-ai/DeepSeek-R1-Distill-Qwen-32B,SAMPLES_PER_FIELD=50 slurm/generate_singlenode.sbatch
 
 set -euo pipefail
 
@@ -58,17 +59,18 @@ echo "Date:   $(date)"
 echo "============================================="
 
 # ---------------------------------------------------------------------------
-# Launch SGLang server locally (single GPU)
+# Launch vLLM server locally (single GPU)
 # ---------------------------------------------------------------------------
 
 echo ""
-echo ">>> Launching SGLang server (single node)..."
+echo ">>> Launching vLLM server (single node)..."
 
-python3 -m sglang.launch_server \
-    --model-path "$MODEL" \
-    --tp 1 \
+python3 -m vllm.entrypoints.openai.api_server \
+    --model "$MODEL" \
+    --tensor-parallel-size 1 \
     --trust-remote-code \
-    --mem-fraction-static 0.90 \
+    --gpu-memory-utilization 0.90 \
+    --max-model-len 4096 \
     --host 0.0.0.0 \
     --port "$SERVER_PORT" &
 SERVER_PID=$!
