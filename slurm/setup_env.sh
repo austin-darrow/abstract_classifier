@@ -42,15 +42,16 @@ echo "Venv Pip:    $(which pip3)"
 # Upgrade pip
 pip3 install --upgrade pip
 
-# Install PyTorch with CUDA support
-pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu129
+# Install SGLang first (it pulls compatible torch + CUDA versions automatically)
+pip3 install "sglang[all]"
 
-# Install the project in editable mode
+# Reinstall torchvision to match whatever torch version sglang installed
+pip3 install --force-reinstall torchvision --no-deps
+pip3 install torchvision
+
+# Install the project in editable mode (httpx and other deps)
 cd "$(dirname "$0")/.."
 pip3 install -e .
-
-# Install generation dependencies (SGLang for inference server, httpx for client)
-pip3 install "sglang[all]" httpx
 
 echo ""
 echo "=== Setup complete ==="
