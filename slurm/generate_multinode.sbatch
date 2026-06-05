@@ -77,10 +77,15 @@ echo "Date:        $(date)"
 echo "============================================="
 
 # ---------------------------------------------------------------------------
-# Create the per-node launch script (Vista MPI pattern)
-# vLLM uses Ray for multi-node; we launch a Ray head on rank 0 and
-# workers on other ranks, then start vLLM on the head.
+# Launch vLLM with Ray for multi-node distributed inference.
+# Ray head starts on rank 0, workers join from other nodes via MPI.
 # ---------------------------------------------------------------------------
+
+# Ensure Ray is available
+if ! command -v ray &>/dev/null; then
+    echo "ERROR: 'ray' not found. Install with: pip install 'ray[default]>=2.30'"
+    exit 1
+fi
 
 LAUNCH_SCRIPT=$(mktemp /tmp/vllm_worker_XXXX.sh)
 chmod +x "$LAUNCH_SCRIPT"
@@ -92,7 +97,6 @@ NODES=$2
 SERVER_PORT=$3
 RAY_PORT=6379
 
-# MPI sets OMPI_COMM_WORLD_RANK for each process
 LOCAL_RANK=${OMPI_COMM_WORLD_RANK}
 
 echo "[Rank $LOCAL_RANK] $(hostname) starting..."
@@ -100,12 +104,13 @@ echo "[Rank $LOCAL_RANK] $(hostname) starting..."
 if [ "$LOCAL_RANK" -eq 0 ]; then
     # Head node: start Ray head + vLLM server
     ray start --head --port=$RAY_PORT --num-gpus=1 --block &
-    sleep 10  # Let Ray head initialize
+    sleep 15  # Let Ray head initialize
 
-    echo "[Rank 0] Launching vLLM server..."
+    echo "[Rank 0] Launching vLLM server (pipeline-parallel=$NODES)..."
     python3 -m vllm.entrypoints.openai.api_server \
         --model deepseek-ai/DeepSeek-R1 \
-        --tensor-parallel-size "$NODES" \
+        --pipeline-parallel-size "$NODES" \
+        --tensor-parallel-size 1 \
         --trust-remote-code \
         --gpu-memory-utilization 0.88 \
         --max-model-len 32768 \
@@ -119,15 +124,10 @@ else
 fi
 WORKER_EOF
 
-# ---------------------------------------------------------------------------
-# Launch vLLM across all nodes via MPI
-# ---------------------------------------------------------------------------
-
 echo ""
 echo ">>> Launching vLLM server across $NUM_NODES nodes via MPI..."
 echo ""
 
-# Launch in background so we can run the client on this node after server is ready
 mpirun -np "$NUM_NODES" --map-by ppr:1:node "$LAUNCH_SCRIPT" "$MASTER_NODE" "$NUM_NODES" "$SERVER_PORT" &
 SERVER_PID=$!
 

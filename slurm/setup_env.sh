@@ -45,6 +45,9 @@ pip3 install --upgrade pip
 # Install vLLM (pulls compatible torch + CUDA automatically)
 pip3 install --no-cache-dir vllm
 
+# Install Ray for multi-node distributed inference
+pip3 install --no-cache-dir "ray[default]>=2.30"
+
 # Install the project in editable mode (httpx and other deps)
 cd "$(dirname "$0")/.."
 pip3 install -e .
