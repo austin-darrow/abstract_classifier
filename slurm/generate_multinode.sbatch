@@ -87,6 +87,25 @@ if ! command -v ray &>/dev/null; then
     exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# Pre-download model weights on head node to avoid Lustre flock race conditions.
+# All workers share the same $SCRATCH cache, so a single download suffices.
+# ---------------------------------------------------------------------------
+
+MODEL="deepseek-ai/DeepSeek-R1"
+
+echo ">>> Pre-downloading model weights (single node)..."
+python3 -c "
+from huggingface_hub import snapshot_download
+snapshot_download('${MODEL}', allow_patterns=['*.safetensors', '*.json', '*.py', 'tokenizer*'])
+print('Download complete.')
+"
+echo ">>> Model cached at ${HF_HOME}/hub"
+
+# Also clean any stale .incomplete / .lock files from prior failed runs
+find "${HF_HOME}/hub" -name "*.incomplete" -delete 2>/dev/null || true
+find "${HF_HOME}/hub" -name "*.lock" -delete 2>/dev/null || true
+
 LAUNCH_SCRIPT="${SCRATCH}/.vllm_worker_${SLURM_JOB_ID}.sh"
 cat > "$LAUNCH_SCRIPT" << 'WORKER_EOF'
 #!/bin/bash
@@ -94,6 +113,9 @@ HOST=$1
 NODES=$2
 SERVER_PORT=$3
 RAY_PORT=6379
+
+# Prevent workers from trying to download (already cached on shared $SCRATCH)
+export HF_HUB_OFFLINE=1
 
 LOCAL_RANK=${OMPI_COMM_WORLD_RANK}
 
