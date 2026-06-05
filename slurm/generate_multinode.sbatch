@@ -87,9 +87,7 @@ if ! command -v ray &>/dev/null; then
     exit 1
 fi
 
-LAUNCH_SCRIPT=$(mktemp /tmp/vllm_worker_XXXX.sh)
-chmod +x "$LAUNCH_SCRIPT"
-
+LAUNCH_SCRIPT="${SCRATCH}/.vllm_worker_${SLURM_JOB_ID}.sh"
 cat > "$LAUNCH_SCRIPT" << 'WORKER_EOF'
 #!/bin/bash
 HOST=$1
@@ -123,6 +121,7 @@ else
     ray start --address="${HOST}:${RAY_PORT}" --num-gpus=1 --block
 fi
 WORKER_EOF
+chmod +x "$LAUNCH_SCRIPT"
 
 echo ""
 echo ">>> Launching vLLM server across $NUM_NODES nodes via MPI..."
