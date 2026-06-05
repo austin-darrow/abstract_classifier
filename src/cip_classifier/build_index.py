@@ -29,6 +29,7 @@ def run(cfg: PipelineConfig, project_root: Path) -> None:
         text = cfg.index.text_template.format(**entry)
         enriched_texts.append(text)
         metadata.append({
+            "Broad_Field_label": entry["Broad_Field_label"],
             "Major_Field_label": entry["Major_Field_label"],
             "Detailed_Field_label": entry["Detailed_Field_label"],
             "SED_CIPTitle": entry["SED_CIPTitle"],

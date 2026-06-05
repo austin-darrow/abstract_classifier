@@ -64,17 +64,24 @@ def run(cfg: PipelineConfig, project_root: Path) -> None:
         top_k_indices = indices[i]
         top_k_sims = similarities[i]
         top_k_fields = [metadata[idx]["Major_Field_label"] for idx in top_k_indices]
+        top_k_broad_fields = [metadata[idx]["Broad_Field_label"] for idx in top_k_indices]
 
         field_counts = Counter(top_k_fields)
         predicted_field, majority_count = field_counts.most_common(1)[0]
+
+        broad_field_counts = Counter(top_k_broad_fields)
+        predicted_broad_field, broad_majority_count = broad_field_counts.most_common(1)[0]
 
         results.append({
             "abstract": abstracts[i],
             "existing_label": existing_labels[i] if pd.notna(existing_labels[i]) else None,
             "predicted_field": predicted_field,
+            "predicted_broad_field": predicted_broad_field,
             "top1_similarity": float(top_k_sims[0]),
             "agreement_ratio": majority_count / top_k,
+            "broad_agreement_ratio": broad_majority_count / top_k,
             "top10_fields": top_k_fields,
+            "top10_broad_fields": top_k_broad_fields,
             "top1_detailed_field": metadata[top_k_indices[0]]["Detailed_Field_label"],
             "top1_cip_title": metadata[top_k_indices[0]]["SED_CIPTitle"],
         })

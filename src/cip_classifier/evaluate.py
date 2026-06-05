@@ -11,6 +11,16 @@ from .config import PipelineConfig
 from .utils import load_json, save_json
 
 
+def _build_major_to_broad_mapping(taxonomy: list[dict]) -> dict[str, str]:
+    """Build a mapping from major field label to broad field label."""
+    mapping = {}
+    for entry in taxonomy:
+        major = entry["Major_Field_label"]
+        broad = entry["Broad_Field_label"]
+        mapping.setdefault(major, broad)
+    return mapping
+
+
 def run(cfg: PipelineConfig, project_root: Path) -> None:
     """Compute accuracy, per-field metrics, confusion analysis, confidence breakdown."""
     results_path = cfg.resolve_path(cfg.paths.classification_results, project_root)
@@ -18,6 +28,14 @@ def run(cfg: PipelineConfig, project_root: Path) -> None:
 
     fields_path = cfg.resolve_path(cfg.paths.major_fields_json, project_root)
     valid_major_fields = sorted(load_json(fields_path))
+
+    broad_fields_path = cfg.resolve_path(cfg.paths.broad_fields_json, project_root)
+    valid_broad_fields = sorted(load_json(broad_fields_path))
+
+    # Build major→broad mapping from taxonomy
+    taxonomy_path = cfg.resolve_path(cfg.paths.taxonomy_json, project_root)
+    taxonomy = load_json(taxonomy_path)
+    major_to_broad = _build_major_to_broad_mapping(taxonomy)
 
     print(f"Loaded {len(results)} classification results")
 
@@ -29,10 +47,24 @@ def run(cfg: PipelineConfig, project_root: Path) -> None:
         print("No labeled records to evaluate. Exiting.")
         return
 
-    # Overall accuracy
+    # Overall accuracy (major field)
     correct = sum(1 for r in labeled if r["predicted_field"] == r["existing_label"])
     accuracy = correct / len(labeled)
-    print(f"\nOverall accuracy: {correct}/{len(labeled)} = {accuracy:.4f}")
+    print(f"\nMajor field accuracy: {correct}/{len(labeled)} = {accuracy:.4f}")
+
+    # Broad field accuracy
+    broad_correct = 0
+    broad_labeled_count = 0
+    for r in labeled:
+        existing_broad = major_to_broad.get(r["existing_label"])
+        predicted_broad = r.get("predicted_broad_field") or major_to_broad.get(r["predicted_field"])
+        if existing_broad:
+            broad_labeled_count += 1
+            if predicted_broad == existing_broad:
+                broad_correct += 1
+
+    broad_accuracy = broad_correct / broad_labeled_count if broad_labeled_count > 0 else 0
+    print(f"Broad field accuracy: {broad_correct}/{broad_labeled_count} = {broad_accuracy:.4f}")
 
     # Per-field metrics (precision, recall, F1)
     tp: Counter = Counter()
@@ -113,7 +145,8 @@ def run(cfg: PipelineConfig, project_root: Path) -> None:
     print("EVALUATION SUMMARY")
     print(f"{'='*60}")
     print(f"Total labeled records: {len(labeled)}")
-    print(f"Overall accuracy: {accuracy:.4f}")
+    print(f"Major field accuracy: {accuracy:.4f}")
+    print(f"Broad field accuracy: {broad_accuracy:.4f}")
     print(f"\nConfidence breakdown:")
     for key, val in confidence_breakdown.items():
         print(f"  {key}: {val['count']} records, accuracy={val['accuracy']:.4f}")
@@ -133,7 +166,8 @@ def run(cfg: PipelineConfig, project_root: Path) -> None:
     evaluation_report = {
         "total_records": len(results),
         "labeled_records": len(labeled),
-        "accuracy": round(accuracy, 4),
+        "major_field_accuracy": round(accuracy, 4),
+        "broad_field_accuracy": round(broad_accuracy, 4),
         "confidence_breakdown": confidence_breakdown,
         "similarity_stats": sim_stats,
         "per_field_metrics": per_field_metrics,
