@@ -109,6 +109,7 @@ if [ "$LOCAL_RANK" -eq 0 ]; then
         --model deepseek-ai/DeepSeek-R1 \
         --pipeline-parallel-size "$NODES" \
         --tensor-parallel-size 1 \
+        --distributed-executor-backend ray \
         --trust-remote-code \
         --gpu-memory-utilization 0.88 \
         --max-model-len 32768 \
