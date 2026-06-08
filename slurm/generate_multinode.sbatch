@@ -177,7 +177,7 @@ if [ "$LOCAL_RANK" -eq 0 ]; then
         --tensor-parallel-size 1 \
         --distributed-executor-backend ray \
         --trust-remote-code \
-        --gpu-memory-utilization 0.95 \
+        --gpu-memory-utilization 0.92 \
         --max-model-len 4096 \
         --max-num-batched-tokens 512 \
         --quantization fp8 \
