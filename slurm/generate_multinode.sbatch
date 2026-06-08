@@ -45,6 +45,9 @@ export TRITON_CACHE_DIR="${SCRATCH}/.cache/triton"
 # Disable flashinfer sampler — use PyTorch-native sampling instead
 export VLLM_USE_FLASHINFER_SAMPLER=0
 
+# Avoid CUDA memory fragmentation — allows allocator to use non-contiguous segments
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
 # Disable DeepGEMM JIT kernels — NVCC JIT compilation fails on Vista GH200
 # nodes (SM90). E8M0 is a Blackwell/SM100 feature that should not be enabled.
 # These must be exported so Ray worker actors inherit them.
@@ -136,6 +139,7 @@ export VLLM_MOE_USE_DEEP_GEMM=0
 export VLLM_USE_DEEP_GEMM_E8M0=0
 export VLLM_USE_DEEP_GEMM_TMA_ALIGNED_SCALES=0
 export VLLM_DEEP_GEMM_WARMUP=skip
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 LOCAL_RANK=${OMPI_COMM_WORLD_RANK}
 
@@ -175,7 +179,7 @@ if [ "$LOCAL_RANK" -eq 0 ]; then
         --trust-remote-code \
         --gpu-memory-utilization 0.95 \
         --max-model-len 4096 \
-        --max-num-batched-tokens 2048 \
+        --max-num-batched-tokens 512 \
         --quantization fp8 \
         --enforce-eager \
         --host 0.0.0.0 \
