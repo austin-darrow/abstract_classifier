@@ -45,12 +45,18 @@ export TRITON_CACHE_DIR="${SCRATCH}/.cache/triton"
 # Disable flashinfer sampler — use PyTorch-native sampling instead
 export VLLM_USE_FLASHINFER_SAMPLER=0
 
-# Disable DeepGEMM JIT kernels — NVCC JIT compilation fails on Vista compute
-# nodes. This forces vLLM to fall back to cutlass/triton FP8 kernels instead.
-export VLLM_DISABLED_KERNELS=deep_gemm
+# Disable DeepGEMM JIT kernels — NVCC JIT compilation fails on Vista GH200
+# nodes (SM90). E8M0 is a Blackwell/SM100 feature that should not be enabled.
+# These must be exported so Ray worker actors inherit them.
+export VLLM_USE_DEEP_GEMM=0
+export VLLM_MOE_USE_DEEP_GEMM=0
+export VLLM_USE_DEEP_GEMM_E8M0=0
+export VLLM_USE_DEEP_GEMM_TMA_ALIGNED_SCALES=0
+export VLLM_DEEP_GEMM_WARMUP=skip
 
-# Point DeepGEMM cache to $SCRATCH in case partial compilation is attempted
+# Point JIT caches to $SCRATCH in case partial compilation is attempted
 export DG_CACHE_DIR="${SCRATCH}/.cache/deep_gemm"
+export CUDA_HOME="${CUDA_HOME:-$(dirname $(dirname $(which nvcc 2>/dev/null)) 2>/dev/null)}"
 
 # NCCL settings for Vista InfiniBand
 export NCCL_DEBUG=WARN
@@ -123,6 +129,13 @@ RAY_PORT=6379
 
 # Prevent workers from trying to download (already cached on shared $SCRATCH)
 export HF_HUB_OFFLINE=1
+
+# Disable DeepGEMM inside Ray workers — must be set before vLLM imports
+export VLLM_USE_DEEP_GEMM=0
+export VLLM_MOE_USE_DEEP_GEMM=0
+export VLLM_USE_DEEP_GEMM_E8M0=0
+export VLLM_USE_DEEP_GEMM_TMA_ALIGNED_SCALES=0
+export VLLM_DEEP_GEMM_WARMUP=skip
 
 LOCAL_RANK=${OMPI_COMM_WORLD_RANK}
 
