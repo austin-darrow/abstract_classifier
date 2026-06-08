@@ -122,9 +122,29 @@ LOCAL_RANK=${OMPI_COMM_WORLD_RANK}
 echo "[Rank $LOCAL_RANK] $(hostname) starting..."
 
 if [ "$LOCAL_RANK" -eq 0 ]; then
-    # Head node: start Ray head + vLLM server
+    # Head node: start Ray head (num-gpus=1 so vLLM can schedule a worker here)
     ray start --head --port=$RAY_PORT --num-gpus=1 --block &
-    sleep 15  # Let Ray head initialize
+    RAY_HEAD_PID=$!
+
+    # Wait until all worker nodes have joined the Ray cluster
+    EXPECTED_GPUS=$NODES
+    MAX_RAY_WAIT=120
+    RAY_ELAPSED=0
+    echo "[Rank 0] Waiting for $EXPECTED_GPUS GPUs in Ray cluster..."
+    while [ $RAY_ELAPSED -lt $MAX_RAY_WAIT ]; do
+        GPU_COUNT=$(python3 -c "import ray; ray.init(address='auto', ignore_reinit_error=True); print(int(ray.cluster_resources().get('GPU', 0)))" 2>/dev/null || echo "0")
+        if [ "$GPU_COUNT" -ge "$EXPECTED_GPUS" ]; then
+            echo "[Rank 0] Ray cluster has $GPU_COUNT GPUs (expected $EXPECTED_GPUS). Proceeding."
+            break
+        fi
+        echo "[Rank 0] Ray cluster has $GPU_COUNT/$EXPECTED_GPUS GPUs. Waiting..."
+        sleep 5
+        RAY_ELAPSED=$((RAY_ELAPSED + 5))
+    done
+
+    if [ "$GPU_COUNT" -lt "$EXPECTED_GPUS" ]; then
+        echo "[Rank 0] WARNING: Only $GPU_COUNT/$EXPECTED_GPUS GPUs after ${MAX_RAY_WAIT}s. Launching anyway."
+    fi
 
     echo "[Rank 0] Launching vLLM server (pipeline-parallel=$NODES)..."
     python3 -m vllm.entrypoints.openai.api_server \
