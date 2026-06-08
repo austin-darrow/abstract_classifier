@@ -144,8 +144,9 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # Rebalance pipeline-parallel layers: PP0 has ~49 GiB free headroom while
 # PP2-PP5 are at 86/95 GiB. Move layers from heavy workers to PP0.
 # DeepSeek-R1 has 61 layers; default split is [7,7,8,8,8,8,8,7].
-# New split gives PP0 extra layers, relieving the memory-constrained middle ranks.
-export VLLM_PP_LAYER_PARTITION=11,9,7,7,7,7,7,6
+# PP0 (embedding+early dense layers) is much lighter per-layer (~46 GiB for 7).
+# New split: only PP1/PP2 remain at 8 layers (86 GiB) instead of 5 ranks.
+export VLLM_PP_LAYER_PARTITION=10,8,8,7,7,7,7,7
 
 LOCAL_RANK=${OMPI_COMM_WORLD_RANK}
 
@@ -186,6 +187,7 @@ if [ "$LOCAL_RANK" -eq 0 ]; then
         --gpu-memory-utilization 0.95 \
         --max-model-len 4096 \
         --max-num-batched-tokens 512 \
+        --max-num-seqs 4 \
         --quantization fp8 \
         --enforce-eager \
         --host 0.0.0.0 \
