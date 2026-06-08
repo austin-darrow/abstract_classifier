@@ -142,13 +142,13 @@ def run_all(cfg, project_root) -> None:
 @cli.command()
 @_config_options
 @click.option("--samples", type=int, default=None,
-              help="Override samples_per_field from config.")
+              help="Override samples_per_cip from config.")
 @click.option("--server-url", type=str, default=None,
               help="Override inference server URL.")
 def generate(cfg, project_root, samples, server_url) -> None:
     """Generate synthetic abstracts using LLM inference server."""
     if samples is not None:
-        cfg.generate.samples_per_field = samples
+        cfg.generate.samples_per_cip = samples
     if server_url is not None:
         cfg.generate.server_url = server_url
     from .generate import run

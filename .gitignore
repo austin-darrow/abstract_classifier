@@ -26,3 +26,5 @@ Thumbs.db
 
 # SLURM logs
 slurm-*.out
+
+data/generated

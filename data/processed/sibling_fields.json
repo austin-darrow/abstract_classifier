@@ -1,0 +1,706 @@
+{
+  "Agricultural, animal, plant, and veterinary sciences": {
+    "broad_field": "Agricultural sciences and natural resources",
+    "siblings": [
+      "Natural resources and conservation"
+    ]
+  },
+  "Economics": {
+    "broad_field": "Social sciences",
+    "siblings": [
+      "Anthropology",
+      "Area, ethnic, cultural, gender, and group studies",
+      "Political science and government",
+      "Public policy analysis",
+      "Social sciences, other",
+      "Sociology, demography, and population studies"
+    ]
+  },
+  "Non-science and engineering, other": {
+    "broad_field": "Other non-science and engineering",
+    "siblings": [
+      "Communication and journalism",
+      "Multidisciplinary/ interdisciplinary studies",
+      "Public administration and social services"
+    ]
+  },
+  "Natural resources and conservation": {
+    "broad_field": "Agricultural sciences and natural resources",
+    "siblings": [
+      "Agricultural, animal, plant, and veterinary sciences"
+    ]
+  },
+  "Area, ethnic, cultural, gender, and group studies": {
+    "broad_field": "Social sciences",
+    "siblings": [
+      "Anthropology",
+      "Economics",
+      "Political science and government",
+      "Public policy analysis",
+      "Social sciences, other",
+      "Sociology, demography, and population studies"
+    ]
+  },
+  "Communication and journalism": {
+    "broad_field": "Other non-science and engineering",
+    "siblings": [
+      "Multidisciplinary/ interdisciplinary studies",
+      "Non-science and engineering, other",
+      "Public administration and social services"
+    ]
+  },
+  "Computer and information sciences, other": {
+    "broad_field": "Computer and information sciences",
+    "siblings": [
+      "Computer science"
+    ]
+  },
+  "Technology and technical fields": {
+    "broad_field": "Technology and technical fields",
+    "siblings": []
+  },
+  "Computer science": {
+    "broad_field": "Computer and information sciences",
+    "siblings": [
+      "Computer and information sciences, other"
+    ]
+  },
+  "Education, other": {
+    "broad_field": "Education",
+    "siblings": [
+      "Education leadership and administration",
+      "Education research",
+      "Teacher education and teaching fields"
+    ]
+  },
+  "Teacher education and teaching fields": {
+    "broad_field": "Education",
+    "siblings": [
+      "Education leadership and administration",
+      "Education research",
+      "Education, other"
+    ]
+  },
+  "Education research": {
+    "broad_field": "Education",
+    "siblings": [
+      "Education leadership and administration",
+      "Education, other",
+      "Teacher education and teaching fields"
+    ]
+  },
+  "Education leadership and administration": {
+    "broad_field": "Education",
+    "siblings": [
+      "Education research",
+      "Education, other",
+      "Teacher education and teaching fields"
+    ]
+  },
+  "Science and mathematics education": {
+    "broad_field": "Science and mathematics education",
+    "siblings": []
+  },
+  "Engineering, other": {
+    "broad_field": "Engineering",
+    "siblings": [
+      "Aerospace, aeronautical, astronautical, and space engineering",
+      "Biological, biomedical, and biosystems engineering",
+      "Chemical and petroleum engineering",
+      "Civil, environmental, and transportation engineering",
+      "Electrical and computer engineering",
+      "Engineering technologies",
+      "Industrial engineering and operations research",
+      "Materials and mining engineering",
+      "Mechanical engineering"
+    ]
+  },
+  "Aerospace, aeronautical, astronautical, and space engineering": {
+    "broad_field": "Engineering",
+    "siblings": [
+      "Biological, biomedical, and biosystems engineering",
+      "Chemical and petroleum engineering",
+      "Civil, environmental, and transportation engineering",
+      "Electrical and computer engineering",
+      "Engineering technologies",
+      "Engineering, other",
+      "Industrial engineering and operations research",
+      "Materials and mining engineering",
+      "Mechanical engineering"
+    ]
+  },
+  "Civil, environmental, and transportation engineering": {
+    "broad_field": "Engineering",
+    "siblings": [
+      "Aerospace, aeronautical, astronautical, and space engineering",
+      "Biological, biomedical, and biosystems engineering",
+      "Chemical and petroleum engineering",
+      "Electrical and computer engineering",
+      "Engineering technologies",
+      "Engineering, other",
+      "Industrial engineering and operations research",
+      "Materials and mining engineering",
+      "Mechanical engineering"
+    ]
+  },
+  "Biological, biomedical, and biosystems engineering": {
+    "broad_field": "Engineering",
+    "siblings": [
+      "Aerospace, aeronautical, astronautical, and space engineering",
+      "Chemical and petroleum engineering",
+      "Civil, environmental, and transportation engineering",
+      "Electrical and computer engineering",
+      "Engineering technologies",
+      "Engineering, other",
+      "Industrial engineering and operations research",
+      "Materials and mining engineering",
+      "Mechanical engineering"
+    ]
+  },
+  "Materials and mining engineering": {
+    "broad_field": "Engineering",
+    "siblings": [
+      "Aerospace, aeronautical, astronautical, and space engineering",
+      "Biological, biomedical, and biosystems engineering",
+      "Chemical and petroleum engineering",
+      "Civil, environmental, and transportation engineering",
+      "Electrical and computer engineering",
+      "Engineering technologies",
+      "Engineering, other",
+      "Industrial engineering and operations research",
+      "Mechanical engineering"
+    ]
+  },
+  "Chemical and petroleum engineering": {
+    "broad_field": "Engineering",
+    "siblings": [
+      "Aerospace, aeronautical, astronautical, and space engineering",
+      "Biological, biomedical, and biosystems engineering",
+      "Civil, environmental, and transportation engineering",
+      "Electrical and computer engineering",
+      "Engineering technologies",
+      "Engineering, other",
+      "Industrial engineering and operations research",
+      "Materials and mining engineering",
+      "Mechanical engineering"
+    ]
+  },
+  "Electrical and computer engineering": {
+    "broad_field": "Engineering",
+    "siblings": [
+      "Aerospace, aeronautical, astronautical, and space engineering",
+      "Biological, biomedical, and biosystems engineering",
+      "Chemical and petroleum engineering",
+      "Civil, environmental, and transportation engineering",
+      "Engineering technologies",
+      "Engineering, other",
+      "Industrial engineering and operations research",
+      "Materials and mining engineering",
+      "Mechanical engineering"
+    ]
+  },
+  "Mechanical engineering": {
+    "broad_field": "Engineering",
+    "siblings": [
+      "Aerospace, aeronautical, astronautical, and space engineering",
+      "Biological, biomedical, and biosystems engineering",
+      "Chemical and petroleum engineering",
+      "Civil, environmental, and transportation engineering",
+      "Electrical and computer engineering",
+      "Engineering technologies",
+      "Engineering, other",
+      "Industrial engineering and operations research",
+      "Materials and mining engineering"
+    ]
+  },
+  "Industrial engineering and operations research": {
+    "broad_field": "Engineering",
+    "siblings": [
+      "Aerospace, aeronautical, astronautical, and space engineering",
+      "Biological, biomedical, and biosystems engineering",
+      "Chemical and petroleum engineering",
+      "Civil, environmental, and transportation engineering",
+      "Electrical and computer engineering",
+      "Engineering technologies",
+      "Engineering, other",
+      "Materials and mining engineering",
+      "Mechanical engineering"
+    ]
+  },
+  "Engineering technologies": {
+    "broad_field": "Engineering",
+    "siblings": [
+      "Aerospace, aeronautical, astronautical, and space engineering",
+      "Biological, biomedical, and biosystems engineering",
+      "Chemical and petroleum engineering",
+      "Civil, environmental, and transportation engineering",
+      "Electrical and computer engineering",
+      "Engineering, other",
+      "Industrial engineering and operations research",
+      "Materials and mining engineering",
+      "Mechanical engineering"
+    ]
+  },
+  "Geological and earth sciences": {
+    "broad_field": "Geosciences, atmospheric, and ocean sciences",
+    "siblings": [
+      "Ocean, marine, and atmospheric sciences"
+    ]
+  },
+  "Foreign languages, literatures, and linguistics": {
+    "broad_field": "Humanities",
+    "siblings": [
+      "English language and literature, letters",
+      "History",
+      "Humanities, other",
+      "Philosophy and religious studies"
+    ]
+  },
+  "Social sciences, other": {
+    "broad_field": "Social sciences",
+    "siblings": [
+      "Anthropology",
+      "Area, ethnic, cultural, gender, and group studies",
+      "Economics",
+      "Political science and government",
+      "Public policy analysis",
+      "Sociology, demography, and population studies"
+    ]
+  },
+  "Multidisciplinary/ interdisciplinary studies": {
+    "broad_field": "Other non-science and engineering",
+    "siblings": [
+      "Communication and journalism",
+      "Non-science and engineering, other",
+      "Public administration and social services"
+    ]
+  },
+  "Psychology, other": {
+    "broad_field": "Psychology",
+    "siblings": [
+      "Clinical psychology",
+      "Counseling and applied psychology",
+      "Research and experimental psychology"
+    ]
+  },
+  "English language and literature, letters": {
+    "broad_field": "Humanities",
+    "siblings": [
+      "Foreign languages, literatures, and linguistics",
+      "History",
+      "Humanities, other",
+      "Philosophy and religious studies"
+    ]
+  },
+  "Humanities, other": {
+    "broad_field": "Humanities",
+    "siblings": [
+      "English language and literature, letters",
+      "Foreign languages, literatures, and linguistics",
+      "History",
+      "Philosophy and religious studies"
+    ]
+  },
+  "Biological and biomedical sciences, general": {
+    "broad_field": "Biological and biomedical sciences",
+    "siblings": [
+      "Biochemistry, biophysics, and molecular biology",
+      "Bioinformatics, biostatistics, and computational biology",
+      "Biological and biomedical sciences, other",
+      "Cell/ cellular biology and anatomy",
+      "Ecology, evolutionary biology, and epidemiology",
+      "Genetics and genomics",
+      "Microbiology and immunology",
+      "Neurobiology and neurosciences",
+      "Pharmacology and toxicology",
+      "Physiology, oncology, and cancer biology"
+    ]
+  },
+  "Biochemistry, biophysics, and molecular biology": {
+    "broad_field": "Biological and biomedical sciences",
+    "siblings": [
+      "Bioinformatics, biostatistics, and computational biology",
+      "Biological and biomedical sciences, general",
+      "Biological and biomedical sciences, other",
+      "Cell/ cellular biology and anatomy",
+      "Ecology, evolutionary biology, and epidemiology",
+      "Genetics and genomics",
+      "Microbiology and immunology",
+      "Neurobiology and neurosciences",
+      "Pharmacology and toxicology",
+      "Physiology, oncology, and cancer biology"
+    ]
+  },
+  "Biological and biomedical sciences, other": {
+    "broad_field": "Biological and biomedical sciences",
+    "siblings": [
+      "Biochemistry, biophysics, and molecular biology",
+      "Bioinformatics, biostatistics, and computational biology",
+      "Biological and biomedical sciences, general",
+      "Cell/ cellular biology and anatomy",
+      "Ecology, evolutionary biology, and epidemiology",
+      "Genetics and genomics",
+      "Microbiology and immunology",
+      "Neurobiology and neurosciences",
+      "Pharmacology and toxicology",
+      "Physiology, oncology, and cancer biology"
+    ]
+  },
+  "Cell/ cellular biology and anatomy": {
+    "broad_field": "Biological and biomedical sciences",
+    "siblings": [
+      "Biochemistry, biophysics, and molecular biology",
+      "Bioinformatics, biostatistics, and computational biology",
+      "Biological and biomedical sciences, general",
+      "Biological and biomedical sciences, other",
+      "Ecology, evolutionary biology, and epidemiology",
+      "Genetics and genomics",
+      "Microbiology and immunology",
+      "Neurobiology and neurosciences",
+      "Pharmacology and toxicology",
+      "Physiology, oncology, and cancer biology"
+    ]
+  },
+  "Microbiology and immunology": {
+    "broad_field": "Biological and biomedical sciences",
+    "siblings": [
+      "Biochemistry, biophysics, and molecular biology",
+      "Bioinformatics, biostatistics, and computational biology",
+      "Biological and biomedical sciences, general",
+      "Biological and biomedical sciences, other",
+      "Cell/ cellular biology and anatomy",
+      "Ecology, evolutionary biology, and epidemiology",
+      "Genetics and genomics",
+      "Neurobiology and neurosciences",
+      "Pharmacology and toxicology",
+      "Physiology, oncology, and cancer biology"
+    ]
+  },
+  "Genetics and genomics": {
+    "broad_field": "Biological and biomedical sciences",
+    "siblings": [
+      "Biochemistry, biophysics, and molecular biology",
+      "Bioinformatics, biostatistics, and computational biology",
+      "Biological and biomedical sciences, general",
+      "Biological and biomedical sciences, other",
+      "Cell/ cellular biology and anatomy",
+      "Ecology, evolutionary biology, and epidemiology",
+      "Microbiology and immunology",
+      "Neurobiology and neurosciences",
+      "Pharmacology and toxicology",
+      "Physiology, oncology, and cancer biology"
+    ]
+  },
+  "Physiology, oncology, and cancer biology": {
+    "broad_field": "Biological and biomedical sciences",
+    "siblings": [
+      "Biochemistry, biophysics, and molecular biology",
+      "Bioinformatics, biostatistics, and computational biology",
+      "Biological and biomedical sciences, general",
+      "Biological and biomedical sciences, other",
+      "Cell/ cellular biology and anatomy",
+      "Ecology, evolutionary biology, and epidemiology",
+      "Genetics and genomics",
+      "Microbiology and immunology",
+      "Neurobiology and neurosciences",
+      "Pharmacology and toxicology"
+    ]
+  },
+  "Pharmacology and toxicology": {
+    "broad_field": "Biological and biomedical sciences",
+    "siblings": [
+      "Biochemistry, biophysics, and molecular biology",
+      "Bioinformatics, biostatistics, and computational biology",
+      "Biological and biomedical sciences, general",
+      "Biological and biomedical sciences, other",
+      "Cell/ cellular biology and anatomy",
+      "Ecology, evolutionary biology, and epidemiology",
+      "Genetics and genomics",
+      "Microbiology and immunology",
+      "Neurobiology and neurosciences",
+      "Physiology, oncology, and cancer biology"
+    ]
+  },
+  "Bioinformatics, biostatistics, and computational biology": {
+    "broad_field": "Biological and biomedical sciences",
+    "siblings": [
+      "Biochemistry, biophysics, and molecular biology",
+      "Biological and biomedical sciences, general",
+      "Biological and biomedical sciences, other",
+      "Cell/ cellular biology and anatomy",
+      "Ecology, evolutionary biology, and epidemiology",
+      "Genetics and genomics",
+      "Microbiology and immunology",
+      "Neurobiology and neurosciences",
+      "Pharmacology and toxicology",
+      "Physiology, oncology, and cancer biology"
+    ]
+  },
+  "Ecology, evolutionary biology, and epidemiology": {
+    "broad_field": "Biological and biomedical sciences",
+    "siblings": [
+      "Biochemistry, biophysics, and molecular biology",
+      "Bioinformatics, biostatistics, and computational biology",
+      "Biological and biomedical sciences, general",
+      "Biological and biomedical sciences, other",
+      "Cell/ cellular biology and anatomy",
+      "Genetics and genomics",
+      "Microbiology and immunology",
+      "Neurobiology and neurosciences",
+      "Pharmacology and toxicology",
+      "Physiology, oncology, and cancer biology"
+    ]
+  },
+  "Ocean, marine, and atmospheric sciences": {
+    "broad_field": "Geosciences, atmospheric, and ocean sciences",
+    "siblings": [
+      "Geological and earth sciences"
+    ]
+  },
+  "Neurobiology and neurosciences": {
+    "broad_field": "Biological and biomedical sciences",
+    "siblings": [
+      "Biochemistry, biophysics, and molecular biology",
+      "Bioinformatics, biostatistics, and computational biology",
+      "Biological and biomedical sciences, general",
+      "Biological and biomedical sciences, other",
+      "Cell/ cellular biology and anatomy",
+      "Ecology, evolutionary biology, and epidemiology",
+      "Genetics and genomics",
+      "Microbiology and immunology",
+      "Pharmacology and toxicology",
+      "Physiology, oncology, and cancer biology"
+    ]
+  },
+  "Mathematics": {
+    "broad_field": "Mathematics and statistics",
+    "siblings": [
+      "Applied mathematics",
+      "Statistics"
+    ]
+  },
+  "Applied mathematics": {
+    "broad_field": "Mathematics and statistics",
+    "siblings": [
+      "Mathematics",
+      "Statistics"
+    ]
+  },
+  "Statistics": {
+    "broad_field": "Mathematics and statistics",
+    "siblings": [
+      "Applied mathematics",
+      "Mathematics"
+    ]
+  },
+  "Multidisciplinary/ interdisciplinary sciences, other": {
+    "broad_field": "Multidisciplinary/ interdisciplinary sciences",
+    "siblings": [
+      "Interdisciplinary computer sciences"
+    ]
+  },
+  "Interdisciplinary computer sciences": {
+    "broad_field": "Multidisciplinary/ interdisciplinary sciences",
+    "siblings": [
+      "Multidisciplinary/ interdisciplinary sciences, other"
+    ]
+  },
+  "Health sciences, other": {
+    "broad_field": "Health sciences",
+    "siblings": [
+      "Nursing and nursing science",
+      "Pharmacy and pharmaceutical sciences",
+      "Public health"
+    ]
+  },
+  "Health professions and related programs": {
+    "broad_field": "Health professions and related programs",
+    "siblings": []
+  },
+  "Philosophy and religious studies": {
+    "broad_field": "Humanities",
+    "siblings": [
+      "English language and literature, letters",
+      "Foreign languages, literatures, and linguistics",
+      "History",
+      "Humanities, other"
+    ]
+  },
+  "Physics": {
+    "broad_field": "Physical sciences",
+    "siblings": [
+      "Astronomy and astrophysics",
+      "Chemistry",
+      "Materials sciences"
+    ]
+  },
+  "Astronomy and astrophysics": {
+    "broad_field": "Physical sciences",
+    "siblings": [
+      "Chemistry",
+      "Materials sciences",
+      "Physics"
+    ]
+  },
+  "Chemistry": {
+    "broad_field": "Physical sciences",
+    "siblings": [
+      "Astronomy and astrophysics",
+      "Materials sciences",
+      "Physics"
+    ]
+  },
+  "Materials sciences": {
+    "broad_field": "Physical sciences",
+    "siblings": [
+      "Astronomy and astrophysics",
+      "Chemistry",
+      "Physics"
+    ]
+  },
+  "Science-related technologies": {
+    "broad_field": "Science-related technologies",
+    "siblings": []
+  },
+  "Research and experimental psychology": {
+    "broad_field": "Psychology",
+    "siblings": [
+      "Clinical psychology",
+      "Counseling and applied psychology",
+      "Psychology, other"
+    ]
+  },
+  "Clinical psychology": {
+    "broad_field": "Psychology",
+    "siblings": [
+      "Counseling and applied psychology",
+      "Psychology, other",
+      "Research and experimental psychology"
+    ]
+  },
+  "Counseling and applied psychology": {
+    "broad_field": "Psychology",
+    "siblings": [
+      "Clinical psychology",
+      "Psychology, other",
+      "Research and experimental psychology"
+    ]
+  },
+  "Homeland security and fire protection": {
+    "broad_field": "Homeland security and fire protection",
+    "siblings": []
+  },
+  "Public administration and social services": {
+    "broad_field": "Other non-science and engineering",
+    "siblings": [
+      "Communication and journalism",
+      "Multidisciplinary/ interdisciplinary studies",
+      "Non-science and engineering, other"
+    ]
+  },
+  "Public policy analysis": {
+    "broad_field": "Social sciences",
+    "siblings": [
+      "Anthropology",
+      "Area, ethnic, cultural, gender, and group studies",
+      "Economics",
+      "Political science and government",
+      "Social sciences, other",
+      "Sociology, demography, and population studies"
+    ]
+  },
+  "Anthropology": {
+    "broad_field": "Social sciences",
+    "siblings": [
+      "Area, ethnic, cultural, gender, and group studies",
+      "Economics",
+      "Political science and government",
+      "Public policy analysis",
+      "Social sciences, other",
+      "Sociology, demography, and population studies"
+    ]
+  },
+  "Sociology, demography, and population studies": {
+    "broad_field": "Social sciences",
+    "siblings": [
+      "Anthropology",
+      "Area, ethnic, cultural, gender, and group studies",
+      "Economics",
+      "Political science and government",
+      "Public policy analysis",
+      "Social sciences, other"
+    ]
+  },
+  "Political science and government": {
+    "broad_field": "Social sciences",
+    "siblings": [
+      "Anthropology",
+      "Area, ethnic, cultural, gender, and group studies",
+      "Economics",
+      "Public policy analysis",
+      "Social sciences, other",
+      "Sociology, demography, and population studies"
+    ]
+  },
+  "Business administration and management": {
+    "broad_field": "Business",
+    "siblings": [
+      "Business, other"
+    ]
+  },
+  "Visual arts, media studies, and design": {
+    "broad_field": "Visual and performing arts",
+    "siblings": [
+      "Performing arts"
+    ]
+  },
+  "Performing arts": {
+    "broad_field": "Visual and performing arts",
+    "siblings": [
+      "Visual arts, media studies, and design"
+    ]
+  },
+  "Pharmacy and pharmaceutical sciences": {
+    "broad_field": "Health sciences",
+    "siblings": [
+      "Health sciences, other",
+      "Nursing and nursing science",
+      "Public health"
+    ]
+  },
+  "Public health": {
+    "broad_field": "Health sciences",
+    "siblings": [
+      "Health sciences, other",
+      "Nursing and nursing science",
+      "Pharmacy and pharmaceutical sciences"
+    ]
+  },
+  "Nursing and nursing science": {
+    "broad_field": "Health sciences",
+    "siblings": [
+      "Health sciences, other",
+      "Pharmacy and pharmaceutical sciences",
+      "Public health"
+    ]
+  },
+  "Business, other": {
+    "broad_field": "Business",
+    "siblings": [
+      "Business administration and management"
+    ]
+  },
+  "History": {
+    "broad_field": "Humanities",
+    "siblings": [
+      "English language and literature, letters",
+      "Foreign languages, literatures, and linguistics",
+      "Humanities, other",
+      "Philosophy and religious studies"
+    ]
+  },
+  "Clinical medical research": {
+    "broad_field": "Health sciences research",
+    "siblings": []
+  }
+}
