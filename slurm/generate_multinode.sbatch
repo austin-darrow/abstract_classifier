@@ -3,16 +3,16 @@
 #SBATCH -o slurm-generate-%j.out    # Output log
 #SBATCH -e slurm-generate-%j.err    # Error log
 #SBATCH -p gh                       # Grace-Hopper GPU partition
-#SBATCH -N 8                        # 8 nodes (1 H100 each = 8 GPUs total)
-#SBATCH -n 8                        # 8 tasks (1 per node)
+#SBATCH -N 9                        # 9 nodes (1 GH200 each = 9 GPUs total)
+#SBATCH -n 9                        # 9 tasks (1 per node)
 #SBATCH -t 12:00:00                 # 12 hours
 #SBATCH --mail-type=begin,end,fail
 #
 # Single-job pipeline: launches DeepSeek-R1 (671B) inference server across
-# 8 GH200 nodes using MPI (per Vista multi-node pattern), waits for readiness,
+# 9 GH200 nodes using MPI (per Vista multi-node pattern), waits for readiness,
 # then runs the abstract generation client on the head node.
 #
-# The model is loaded in FP8 precision (~84GB per GPU across 8 GPUs).
+# The model is loaded in FP8 precision (~75GB per GPU across 9 GPUs).
 #
 # Usage:
 #   sbatch slurm/launch_server.sbatch
@@ -141,13 +141,6 @@ export VLLM_USE_DEEP_GEMM_TMA_ALIGNED_SCALES=0
 export VLLM_DEEP_GEMM_WARMUP=skip
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-# Rebalance pipeline-parallel layers: PP0 has ~49 GiB free headroom while
-# PP2-PP5 are at 86/95 GiB. Move layers from heavy workers to PP0.
-# DeepSeek-R1 has 61 layers; default split is [7,7,8,8,8,8,8,7].
-# PP0 (embedding+early dense layers) is much lighter per-layer (~46 GiB for 7).
-# New split: only PP1/PP2 remain at 8 layers (86 GiB) instead of 5 ranks.
-export VLLM_PP_LAYER_PARTITION=10,8,8,7,7,7,7,7
-
 LOCAL_RANK=${OMPI_COMM_WORLD_RANK}
 
 echo "[Rank $LOCAL_RANK] $(hostname) starting..."
@@ -187,7 +180,6 @@ if [ "$LOCAL_RANK" -eq 0 ]; then
         --gpu-memory-utilization 0.95 \
         --max-model-len 4096 \
         --max-num-batched-tokens 512 \
-        --max-num-seqs 4 \
         --quantization fp8 \
         --enforce-eager \
         --host 0.0.0.0 \
