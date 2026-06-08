@@ -45,6 +45,13 @@ export TRITON_CACHE_DIR="${SCRATCH}/.cache/triton"
 # Disable flashinfer sampler — use PyTorch-native sampling instead
 export VLLM_USE_FLASHINFER_SAMPLER=0
 
+# Disable DeepGEMM JIT kernels — NVCC JIT compilation fails on Vista compute
+# nodes. This forces vLLM to fall back to cutlass/triton FP8 kernels instead.
+export VLLM_DISABLED_KERNELS=deep_gemm
+
+# Point DeepGEMM cache to $SCRATCH in case partial compilation is attempted
+export DG_CACHE_DIR="${SCRATCH}/.cache/deep_gemm"
+
 # NCCL settings for Vista InfiniBand
 export NCCL_DEBUG=WARN
 export NCCL_IB_GID_INDEX=3
