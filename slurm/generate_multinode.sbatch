@@ -141,6 +141,12 @@ export VLLM_USE_DEEP_GEMM_TMA_ALIGNED_SCALES=0
 export VLLM_DEEP_GEMM_WARMUP=skip
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
+# Rebalance pipeline-parallel layers: PP0 has ~49 GiB free headroom while
+# PP2-PP5 are at 86/95 GiB. Move layers from heavy workers to PP0.
+# DeepSeek-R1 has 61 layers; default split is [7,7,8,8,8,8,8,7].
+# New split gives PP0 extra layers, relieving the memory-constrained middle ranks.
+export VLLM_PP_LAYER_PARTITION=11,9,7,7,7,7,7,6
+
 LOCAL_RANK=${OMPI_COMM_WORLD_RANK}
 
 echo "[Rank $LOCAL_RANK] $(hostname) starting..."
@@ -177,7 +183,7 @@ if [ "$LOCAL_RANK" -eq 0 ]; then
         --tensor-parallel-size 1 \
         --distributed-executor-backend ray \
         --trust-remote-code \
-        --gpu-memory-utilization 0.92 \
+        --gpu-memory-utilization 0.95 \
         --max-model-len 4096 \
         --max-num-batched-tokens 512 \
         --quantization fp8 \
