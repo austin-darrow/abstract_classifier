@@ -173,9 +173,10 @@ if [ "$LOCAL_RANK" -eq 0 ]; then
         --tensor-parallel-size 1 \
         --distributed-executor-backend ray \
         --trust-remote-code \
-        --gpu-memory-utilization 0.88 \
-        --max-model-len 32768 \
+        --gpu-memory-utilization 0.95 \
+        --max-model-len 8192 \
         --quantization fp8 \
+        --enforce-eager \
         --host 0.0.0.0 \
         --port "$SERVER_PORT"
 else
