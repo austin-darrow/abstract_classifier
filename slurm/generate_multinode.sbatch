@@ -174,7 +174,8 @@ if [ "$LOCAL_RANK" -eq 0 ]; then
         --distributed-executor-backend ray \
         --trust-remote-code \
         --gpu-memory-utilization 0.95 \
-        --max-model-len 8192 \
+        --max-model-len 4096 \
+        --max-num-batched-tokens 2048 \
         --quantization fp8 \
         --enforce-eager \
         --host 0.0.0.0 \
