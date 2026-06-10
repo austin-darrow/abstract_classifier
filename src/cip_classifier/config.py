@@ -79,13 +79,6 @@ class GenerateConfig(BaseModel):
     request_timeout: float = 300.0
     sibling_fields_json: str = "data/processed/sibling_fields.json"
     use_chat_api: bool = True
-    styles: list[str] = Field(default_factory=lambda: [
-        "empirical study",
-        "theoretical/mathematical",
-        "methods/tools paper",
-        "case study",
-        "systematic review",
-    ])
 
 
 class RuntimeConfig(BaseModel):

@@ -8,16 +8,10 @@ generate:
   model: deepseek-ai/DeepSeek-R1
   server_url: http://localhost:30000
   temperature: 0.6
-  max_tokens: 4096
+  max_tokens: 8192
   samples_per_cip: 3
   concurrency: 16
   max_retries: 3
   request_timeout: 300.0
   use_chat_api: true
   seed: 42
-  styles:
-    - empirical study
-    - theoretical/mathematical
-    - methods/tools paper
-    - case study
-    - systematic review
