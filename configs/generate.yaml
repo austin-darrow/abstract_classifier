@@ -9,7 +9,7 @@ generate:
   server_url: http://localhost:30000
   temperature: 0.6
   max_tokens: 4096
-  samples_per_cip: 3
+  samples_per_cip: 10
   concurrency: 48
   max_retries: 3
   request_timeout: 300.0
