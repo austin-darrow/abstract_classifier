@@ -1,0 +1,1 @@
+"""Synthetic abstract generation pipeline."""

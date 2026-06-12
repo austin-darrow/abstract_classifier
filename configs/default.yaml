@@ -1,4 +1,4 @@
-# CIP Classifier Pipeline Configuration
+# CIP Classifier — Default Configuration
 # All paths are relative to the project root unless absolute
 
 paths:
@@ -26,20 +26,12 @@ paths:
   visualization_plot: output/reports/embedding_visualization.png
 
 models:
-  # Model used to embed CIP taxonomy entries (for index)
   index_encoder: shahafvl/bge-reasoner-scientific-parent-noprompt
-
-  # Model used to embed query abstracts
   query_encoder: shahafvl/bge-reasoner-scientific-parent-noprompt
-
-  # Prefix prepended to abstracts before encoding (some models require this)
   query_prefix: ""
 
 parse:
-  # Excel sheet name containing the taxonomy
   sheet_name: SEDCIP24
-
-  # Columns to drop from the raw taxonomy
   drop_columns:
     - SED_CIPCode
     - CIP Code
@@ -56,12 +48,7 @@ parse:
     - Field_Area_Label
 
 index:
-  # Batch size for encoding taxonomy entries
   batch_size: 64
-
-  # Template for enriched text (Python format string)
-  # Available keys: Broad_Field_label, Major_Field_label, Detailed_Field_label,
-  #                 SED_CIPTitle, CIPDefinition
   text_template: >-
     Broad field: {Broad_Field_label} |
     Major field: {Major_Field_label} |
@@ -69,66 +56,21 @@ index:
     {SED_CIPTitle}: {CIPDefinition}
 
 classify:
-  # Number of nearest neighbors to retrieve
   top_k: 10
-
-  # Batch size for encoding abstracts (overridden by runtime.batch_size if set)
   batch_size: 32
 
 evaluate:
-  # Agreement ratio thresholds for confidence breakdown
   confidence_thresholds:
     - 0.7
     - 0.5
     - 0.3
-
-  # Number of top confused pairs to report
   top_confused_pairs: 20
 
 visualize:
-  # Dimensionality reduction method: umap or tsne
   method: umap
-
-  # UMAP parameters
   n_neighbors: 15
   min_dist: 0.1
-
-  # t-SNE parameters (only used when method=tsne)
   perplexity: 30.0
 
-generate:
-  # Model served by SGLang/vLLM inference server
-  model: deepseek-ai/DeepSeek-R1
-
-  # SGLang server endpoint (set by slurm/launch_server.sbatch)
-  server_url: http://localhost:30000
-
-  # Sampling parameters (DeepSeek-R1 recommends 0.5-0.7)
-  temperature: 0.6
-  max_tokens: 1024
-
-  # Number of abstracts to generate per major field
-  samples_per_field: 10
-
-  # Output directory for generated datasets
-  output_dir: data/generated
-
-  # Reproducibility
-  seed: 42
-
-  # Concurrent requests to the inference server
-  batch_size: 16
-
-  # Train/test split ratio
-  train_ratio: 0.8
-
-  # Length filters (word count)
-  min_abstract_length: 150
-  max_abstract_length: 800
-
 runtime:
-  # Device: auto, cuda, cpu
   device: auto
-
-  # Override batch size for all steps (null = use per-step defaults)
-  batch_size: null

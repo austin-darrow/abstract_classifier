@@ -120,18 +120,17 @@ if [[ -n "${SAMPLES_PER_FIELD:-}" ]]; then
     EXTRA_ARGS="--samples $SAMPLES_PER_FIELD"
 fi
 
-python -m cip_classifier generate \
-    --config config/default.yaml \
-    --config config/generate.yaml \
+python scripts/generate_abstracts.py \
+    --config configs/default.yaml configs/generate.yaml \
     --server-url "$SERVER_URL" \
     $EXTRA_ARGS
 
 echo ""
 echo ">>> Running train/test split..."
 
-python -m cip_classifier split \
-    --config config/default.yaml \
-    --config config/generate.yaml
+python scripts/generate_abstracts.py \
+    --config configs/default.yaml configs/generate.yaml \
+    --split
 
 echo ""
 echo ">>> All done: $(date)"

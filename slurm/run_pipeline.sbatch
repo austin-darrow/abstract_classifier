@@ -30,9 +30,8 @@ echo "GPU:  $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || e
 echo "Date: $(date)"
 echo ""
 
-python -m cip_classifier run-all \
-    --config config/default.yaml \
-    --config config/vista.yaml
+python scripts/run_baseline.py \
+    --config configs/default.yaml configs/vista.yaml
 
 echo ""
 echo "Pipeline completed: $(date)"

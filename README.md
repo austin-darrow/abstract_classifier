@@ -1,130 +1,117 @@
 # CIP Classifier
 
-Classify research abstracts against the [CIP taxonomy](https://nces.ed.gov/ipeds/cipcode/) using embedding similarity and FAISS nearest-neighbor retrieval.
+Classify research abstracts against the [CIP taxonomy](https://nces.ed.gov/ipeds/cipcode/) for field-of-science reporting. Built for TACC HPC allocation request abstracts.
 
-## Pipeline Steps
+## Project Stages
 
-| Step | Command | Description |
-|------|---------|-------------|
-| 0 | `parse` | Parse CIP taxonomy from Excel → JSON |
-| 1 | `build-index` | Embed taxonomy, build FAISS index |
-| 2 | `classify` | Embed abstracts, retrieve top-K, majority vote |
-| 3 | `evaluate` | Compare predictions to existing labels |
-| — | `run-all` | Run steps 0–3 sequentially |
+| Stage | Command | Description |
+|-------|---------|-------------|
+| 0 | `cip-classifier baseline --step parse` | Parse CIP taxonomy from Excel → JSON |
+| 1 | `cip-classifier generate` | Generate synthetic training data via LLM |
+| 2 | `cip-classifier train` | Train classifier (embedding head or SetFit) |
+| 3 | `cip-classifier baseline` | Embedding retrieval baseline (FAISS) |
+| — | `cip-classifier evaluate` | Evaluate classification results |
+| — | `cip-classifier visualize` | UMAP/t-SNE embedding plots |
 
-## Quick Start (Local)
+## Quick Start
 
 ```bash
 # Install in editable mode
 pip install -e .
 
-# Run full pipeline with default config
-python -m cip_classifier run-all
+# Run full baseline pipeline (parse → index → classify → evaluate)
+cip-classifier baseline
 
-# Or run individual steps
-python -m cip_classifier parse
-python -m cip_classifier build-index
-python -m cip_classifier classify
-python -m cip_classifier evaluate
+# Individual steps
+cip-classifier baseline --step build-index
+cip-classifier baseline --step classify
+cip-classifier evaluate
 
-# Use a custom config
-python -m cip_classifier classify --config config/default.yaml --config config/vista.yaml
+# Override config for Vista HPC
+cip-classifier baseline -c configs/vista.yaml
+
+# Generate synthetic abstracts (requires LLM inference server)
+cip-classifier generate -c configs/generate.yaml
+
+# Train classifier on synthetic data
+cip-classifier train -c configs/train.yaml
 ```
+
+If `configs/default.yaml` exists, it's loaded automatically. Additional `-c` flags
+override on top of it.
 
 ## Configuration
 
-All parameters live in YAML files under `config/`:
+YAML files under `configs/`, composable via `-c`:
 
-- **`config/default.yaml`** — Base configuration (model names, paths, hyperparameters)
-- **`config/vista.yaml`** — TACC Vista overrides (larger batch sizes, bigger models)
-
-Multiple `--config` flags are supported; later files override earlier ones.
-
-### Key config options
-
-```yaml
-models:
-  index_encoder: BAAI/bge-large-en-v1.5   # Model for taxonomy embeddings
-  query_encoder: BAAI/bge-large-en-v1.5   # Model for abstract embeddings
-  query_prefix: ""                         # Optional prefix for query model
-
-classify:
-  top_k: 10          # Neighbors for majority vote
-  batch_size: 32     # Encoding batch size
-
-runtime:
-  device: auto       # auto | cuda | cpu
-```
+- **`configs/default.yaml`** — Base config (paths, models, evaluation params)
+- **`configs/generate.yaml`** — LLM generation (DeepSeek-R1, server settings)
+- **`configs/train.yaml`** — Classifier training (model type, hyperparams)
+- **`configs/vista.yaml`** — TACC Vista HPC overrides (GPU, batch sizes)
 
 ## Running on TACC Vista
 
 ### First-time setup
 
 ```bash
-# Get an interactive node
 idev -p gh-dev -N 1 -n 1 -t 00:30:00
-
-# Run setup script (creates venv on $SCRATCH, installs deps + project)
 bash slurm/setup_env.sh
 ```
 
 ### Submit jobs
 
 ```bash
-# Full pipeline (single GH node, ~6 hrs)
-sbatch -A <your_allocation> slurm/run_pipeline.sbatch
+# Full baseline pipeline (single GH node)
+sbatch -A <alloc> slurm/run_pipeline.sbatch
 
-# Or individual steps
-sbatch -A <your_allocation> slurm/build_index.sbatch
-sbatch -A <your_allocation> slurm/classify.sbatch
-```
+# Generate synthetic data (9 nodes, DeepSeek-R1 671B)
+sbatch -A <alloc> slurm/generate_multinode.sbatch
 
-### Data placement on Vista
-
-Place input files where the config expects them:
-```bash
-cp SEDCIP24_TACC.xlsx   /path/to/project/data/raw/
-cp database_abstracts.xlsx /path/to/project/data/raw/
+# Train classifier (single node)
+sbatch -A <alloc> slurm/train.sbatch
 ```
 
 ## Project Structure
 
 ```
-├── config/                  # Pipeline configuration (YAML)
-│   ├── default.yaml
-│   └── vista.yaml
-├── src/cip_classifier/      # Python package
-│   ├── __main__.py          # CLI entry point
-│   ├── config.py            # Config loading & validation
-│   ├── parse_fields.py      # Step 0
-│   ├── build_index.py       # Step 1
-│   ├── classify.py          # Step 2
-│   ├── evaluate.py          # Step 3
-│   └── utils.py             # Shared utilities
-├── slurm/                   # SLURM job scripts for Vista
+├── configs/                     # YAML configuration
+│   ├── default.yaml             # Base config (paths, models, eval)
+│   ├── generate.yaml            # LLM generation settings
+│   ├── train.yaml               # Classifier training params
+│   └── vista.yaml               # TACC Vista HPC overrides
+├── scripts/                     # Standalone entry points (for SLURM)
+├── src/cip_classifier/          # Library + CLI
+│   ├── __main__.py              # Click CLI (cip-classifier command)
+│   ├── config.py                # Pydantic config loading
+│   ├── utils.py                 # Encoding, FAISS I/O, model loading
+│   ├── data/                    # Taxonomy parsing, splitting
+│   ├── generation/              # LLM abstract generation pipeline
+│   ├── models/                  # Classifier implementations
+│   ├── baselines/               # FAISS retrieval baseline
+│   └── evaluation/              # Metrics, comparison
+├── slurm/                       # SLURM job scripts for Vista
 ├── data/
-│   ├── raw/                 # Input Excel files (gitignored)
-│   └── processed/           # Parsed taxonomy JSONs
-├── output/                  # All generated artifacts (gitignored)
-│   ├── index/               # FAISS index + metadata
-│   ├── results/             # Classification results
-│   └── reports/             # Evaluation reports
-└── pyproject.toml           # Package definition & dependencies
+│   ├── raw/                     # Input Excel files (gitignored)
+│   ├── processed/               # Taxonomy JSONs, sibling fields
+│   └── generated/               # Synthetic abstracts (gitignored)
+├── output/                      # All artifacts (gitignored)
+│   ├── models/                  # Trained classifiers
+│   ├── index/                   # FAISS index + metadata
+│   ├── results/                 # Classification results
+│   └── reports/                 # Evaluation reports
+└── pyproject.toml
 ```
 
 ## Switching Models
 
-To experiment with different embedding models, edit the config or create a new override:
-
 ```yaml
-# config/experiment_e5.yaml
+# configs/experiment_e5.yaml
 models:
   index_encoder: intfloat/e5-mistral-7b-instruct
   query_encoder: intfloat/e5-mistral-7b-instruct
   query_prefix: "query: "
 ```
 
-Then run:
 ```bash
-python -m cip_classifier run-all -c config/default.yaml -c config/experiment_e5.yaml
+cip-classifier baseline -c configs/experiment_e5.yaml -c configs/vista.yaml
 ```

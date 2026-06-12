@@ -5,7 +5,7 @@
 #SBATCH -p gh                       # Grace-Hopper GPU partition
 #SBATCH -N 9                        # 9 nodes (1 GH200 each = 9 GPUs total)
 #SBATCH -n 9                        # 9 tasks (1 per node)
-#SBATCH -t 12:00:00                 # 12 hours
+#SBATCH -t 24:00:00                 # 24 hours
 #SBATCH --mail-type=begin,end,fail
 #
 # Single-job pipeline: launches DeepSeek-R1 (671B) inference server across
@@ -241,18 +241,17 @@ if [[ -n "${SAMPLES_PER_FIELD:-}" ]]; then
     EXTRA_ARGS="--samples $SAMPLES_PER_FIELD"
 fi
 
-python -m cip_classifier generate \
-    --config config/default.yaml \
-    --config config/generate.yaml \
+python scripts/generate_abstracts.py \
+    --config configs/default.yaml configs/generate.yaml \
     --server-url "$SERVER_URL" \
     $EXTRA_ARGS
 
 echo ""
 echo ">>> Generation complete. Running train/test split..."
 
-python -m cip_classifier split \
-    --config config/default.yaml \
-    --config config/generate.yaml
+python scripts/generate_abstracts.py \
+    --config configs/default.yaml configs/generate.yaml \
+    --split
 
 echo ""
 echo ">>> All done: $(date)"

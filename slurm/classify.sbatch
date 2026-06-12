@@ -31,15 +31,14 @@ echo "GPU:  $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || e
 echo "Date: $(date)"
 echo ""
 
-python -m cip_classifier classify \
-    --config config/default.yaml \
-    --config config/vista.yaml
+python scripts/run_baseline.py \
+    --config configs/default.yaml configs/vista.yaml \
+    --step classify
 
 echo ""
 echo "=== Evaluate Results ==="
-python -m cip_classifier evaluate \
-    --config config/default.yaml \
-    --config config/vista.yaml
+python scripts/evaluate.py \
+    --config configs/default.yaml configs/vista.yaml
 
 echo ""
 echo "Completed: $(date)"

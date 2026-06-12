@@ -1,4 +1,7 @@
-"""Step 2: Classify abstracts via nearest-neighbor matching against CIP index."""
+"""Embedding-based retrieval classifier using FAISS.
+
+Combines the build-index and classify steps into a single baseline module.
+"""
 
 from __future__ import annotations
 
@@ -8,11 +11,65 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .config import PipelineConfig
-from .utils import encode_texts, load_faiss_index, load_json, load_model, save_json
+from ..config import PipelineConfig
+from ..utils import (
+    build_faiss_index,
+    encode_texts,
+    load_faiss_index,
+    load_json,
+    load_model,
+    save_faiss_index,
+    save_json,
+)
 
 
-def run(cfg: PipelineConfig, project_root: Path) -> None:
+def build_index(cfg: PipelineConfig, project_root: Path) -> None:
+    """Load taxonomy, embed entries, build and save FAISS index."""
+    taxonomy_path = cfg.resolve_path(cfg.paths.taxonomy_json, project_root)
+    cip_entries = load_json(taxonomy_path)
+    print(f"Loaded {len(cip_entries)} CIP entries from {taxonomy_path}")
+
+    # Build enriched text and metadata
+    enriched_texts = []
+    metadata = []
+
+    for entry in cip_entries:
+        text = cfg.index.text_template.format(**entry)
+        enriched_texts.append(text)
+        metadata.append({
+            "Broad_Field_label": entry["Broad_Field_label"],
+            "Major_Field_label": entry["Major_Field_label"],
+            "Detailed_Field_label": entry["Detailed_Field_label"],
+            "SED_CIPTitle": entry["SED_CIPTitle"],
+        })
+
+    print(f"Built {len(enriched_texts)} enriched text strings")
+    print(f"Sample: {enriched_texts[0][:200]}...")
+
+    # Embed taxonomy
+    device = cfg.get_device()
+    model = load_model(cfg.models.index_encoder, device)
+
+    batch_size = cfg.runtime.batch_size or cfg.index.batch_size
+    print(f"Encoding taxonomy entries (batch_size={batch_size})...")
+    embeddings = encode_texts(model, enriched_texts, batch_size=batch_size, mode="document")
+    print(f"Embeddings shape: {embeddings.shape}")
+
+    # Build and save FAISS index
+    index = build_faiss_index(embeddings)
+    print(f"FAISS index built: {index.ntotal} vectors, dimension {embeddings.shape[1]}")
+
+    index_path = cfg.resolve_path(cfg.paths.faiss_index, project_root)
+    save_faiss_index(index, index_path)
+
+    metadata_path = cfg.resolve_path(cfg.paths.index_metadata, project_root)
+    save_json(metadata, metadata_path)
+
+    print(f"Saved: {index_path}, {metadata_path}")
+    print("Done.")
+
+
+def classify(cfg: PipelineConfig, project_root: Path) -> None:
     """Embed abstracts, query FAISS index, assign fields via majority vote."""
     device = cfg.get_device()
     print(f"Device: {device}")
@@ -104,3 +161,33 @@ def run(cfg: PipelineConfig, project_root: Path) -> None:
     print(f"  Mean top-1 similarity: {np.mean([r['top1_similarity'] for r in results]):.4f}")
     print(f"  Mean agreement ratio: {np.mean([r['agreement_ratio'] for r in results]):.2f}")
     print("Done.")
+
+
+def run_all(cfg: PipelineConfig, project_root: Path) -> None:
+    """Run the full baseline pipeline: parse → build-index → classify → evaluate."""
+    from ..data.taxonomy import run as parse_run
+    from ..evaluation.metrics import run as evaluate_run
+
+    print("=" * 60)
+    print("STEP 0: Parse taxonomy")
+    print("=" * 60)
+    parse_run(cfg, project_root)
+
+    print("\n" + "=" * 60)
+    print("STEP 1: Build FAISS index")
+    print("=" * 60)
+    build_index(cfg, project_root)
+
+    print("\n" + "=" * 60)
+    print("STEP 2: Classify abstracts")
+    print("=" * 60)
+    classify(cfg, project_root)
+
+    print("\n" + "=" * 60)
+    print("STEP 3: Evaluate results")
+    print("=" * 60)
+    evaluate_run(cfg, project_root)
+
+    print("\n" + "=" * 60)
+    print("PIPELINE COMPLETE")
+    print("=" * 60)

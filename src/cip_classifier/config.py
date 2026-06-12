@@ -81,6 +81,23 @@ class GenerateConfig(BaseModel):
     use_chat_api: bool = True
 
 
+class TrainConfig(BaseModel):
+    model_type: str = "embedding_head"  # "embedding_head" or "setfit"
+    encoder: str = "BAAI/bge-base-en-v1.5"
+    train_data: str = "data/generated/train.jsonl"
+    test_data: str = "data/generated/test.jsonl"
+    output_dir: str = "output/models"
+    # Embedding head params
+    hidden_dim: int = 256
+    dropout: float = 0.1
+    learning_rate: float = 1e-3
+    epochs: int = 20
+    batch_size: int = 64
+    # SetFit params
+    setfit_num_iterations: int = 20
+    setfit_num_epochs: int = 1
+
+
 class RuntimeConfig(BaseModel):
     device: str = "auto"
     batch_size: Optional[int] = None
@@ -95,6 +112,7 @@ class PipelineConfig(BaseModel):
     evaluate: EvaluateConfig = Field(default_factory=EvaluateConfig)
     visualize: VisualizeConfig = Field(default_factory=VisualizeConfig)
     generate: GenerateConfig = Field(default_factory=GenerateConfig)
+    train: TrainConfig = Field(default_factory=TrainConfig)
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
 
     def resolve_path(self, path_str: str, project_root: Path) -> Path:

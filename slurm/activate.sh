@@ -4,4 +4,4 @@
 
 module load gcc cuda python3
 source "${SCRATCH}/envs/cip_classifier/bin/activate"
-echo "CIP Classifier environment activated. Run: python -m cip_classifier --help"
+echo "CIP Classifier environment activated. Run: python scripts/run_baseline.py --help"

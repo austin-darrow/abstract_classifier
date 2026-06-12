@@ -10,7 +10,7 @@ generate:
   temperature: 0.6
   max_tokens: 4096
   samples_per_cip: 3
-  concurrency: 16
+  concurrency: 48
   max_retries: 3
   request_timeout: 300.0
   use_chat_api: true

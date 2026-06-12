@@ -1,4 +1,4 @@
-"""Step 0: Parse CIP taxonomy from Excel into structured JSON files."""
+"""CIP taxonomy parsing from Excel to structured JSON."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from .config import PipelineConfig
-from .utils import save_json
+from ..config import PipelineConfig
+from ..utils import save_json
 
 
 def run(cfg: PipelineConfig, project_root: Path) -> None:

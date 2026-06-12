@@ -55,4 +55,4 @@ pip3 install -e .
 echo ""
 echo "=== Setup complete ==="
 echo "Activate with: source $VENV_DIR/bin/activate"
-echo "Run pipeline:  python -m cip_classifier --help"
+echo "Run pipeline:  python scripts/run_baseline.py --help"

@@ -1,12 +1,4 @@
-"""Synthetic abstract generation using DeepSeek-R1 via vLLM.
-
-Pipeline v3: Per-CIP-program generation with adversarial verification.
-
-Usage:
-    # Start the inference server first (see slurm/generate_multinode.sbatch)
-    python -m cip_classifier generate -c config/default.yaml -c config/generate.yaml
-    python -m cip_classifier split -c config/default.yaml -c config/generate.yaml
-"""
+"""Generation pipeline orchestration: server communication, post-processing, and main loop."""
 
 from __future__ import annotations
 
@@ -22,7 +14,9 @@ from typing import Any
 
 import httpx
 
-from .config import PipelineConfig
+from ..config import PipelineConfig
+from .prompts import build_prompt
+from .verification import verify_abstract
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +36,7 @@ def load_taxonomy(cfg: PipelineConfig, project_root: Path) -> list[dict]:
 
 
 def load_sibling_map(cfg: PipelineConfig, project_root: Path) -> dict[str, Any]:
-    """Load the precomputed sibling fields map.
-
-    Returns:
-        Dict mapping major_field -> {broad_field, siblings: [major_field, ...]}
-    """
+    """Load the precomputed sibling fields map."""
     path = cfg.resolve_path(cfg.generate.sibling_fields_json, project_root)
     with open(path) as f:
         return json.load(f)
@@ -64,81 +54,9 @@ def build_detailed_fields_map(cip_programs: list[dict]) -> dict[str, list[str]]:
 
 
 # ---------------------------------------------------------------------------
-# Prompt construction
-# ---------------------------------------------------------------------------
-
-
-def build_prompt(
-    cip_title: str,
-    cip_definition: str,
-    major_field: str,
-    broad_field: str,
-    siblings: list[str],
-    is_nec: bool = False,
-) -> str:
-    """Build a generation prompt for a specific CIP program.
-
-    Follows DeepSeek-R1 guidelines: all instructions in user message, no system prompt.
-    """
-    if is_nec:
-        return _build_nec_prompt(
-            cip_title, cip_definition, broad_field, siblings
-        )
-
-    sibling_lines = "\n".join(f"- {s}" for s in siblings) if siblings else "- (none)"
-
-    return (
-        f"Write a project abstract for a research computing resource allocation request "
-        f"in the following academic program.\n\n"
-        f"Program: {cip_title}\n"
-        f"Definition: {cip_definition}\n"
-        f"Academic field: {major_field} (part of {broad_field})\n\n"
-        f"Other fields in {broad_field} that this abstract should NOT be about:\n"
-        f"{sibling_lines}\n\n"
-        f"The abstract should describe a research project requesting high-performance "
-        f"computing resources. It should cover the research problem, the computational "
-        f"approach or methods planned, and the expected significance or outcomes. "
-        f"Write 150-400 words in a natural academic tone. The project may describe "
-        f"proposed work, ongoing research, or a mix of both.\n\n"
-        f"Output ONLY the abstract text \xe2\x80\x94 no title, no author names, no metadata, "
-        f"no commentary, no markdown formatting."
-    )
-
-
-def _build_nec_prompt(
-    cip_title: str,
-    cip_definition: str,
-    broad_field: str,
-    siblings: list[str],
-) -> str:
-    """Build a prompt for NEC (not elsewhere classified) fields."""
-    sibling_lines = "\n".join(f"- {s}" for s in siblings)
-
-    return (
-        f"Write a project abstract for a research computing resource allocation request "
-        f"that falls within {broad_field} but does NOT belong to any of the following "
-        f"established major fields:\n"
-        f"{sibling_lines}\n\n"
-        f"The research should address a topic that is clearly within {broad_field} "
-        f"but occupies an interdisciplinary, emerging, or specialized niche not "
-        f"covered by the fields listed above.\n\n"
-        f"Program context: {cip_title}\n"
-        f"Definition: {cip_definition}\n\n"
-        f"The abstract should describe a research project requesting high-performance "
-        f"computing resources. It should cover the research problem, the computational "
-        f"approach or methods planned, and the expected significance or outcomes. "
-        f"Write 150-400 words in a natural academic tone. The project may describe "
-        f"proposed work, ongoing research, or a mix of both.\n\n"
-        f"Output ONLY the abstract text \xe2\x80\x94 no title, no author names, no metadata, "
-        f"no commentary, no markdown formatting."
-    )
-
-
-# ---------------------------------------------------------------------------
 # Post-processing
 # ---------------------------------------------------------------------------
 
-# Patterns to strip
 _PREAMBLE_PATTERNS = [
     re.compile(r"^(Certainly|Sure|Of course|Here('s| is)|I('ll| will)|Let me)[^.]*[.!:]\s*", re.IGNORECASE),
     re.compile(r"^(Below is|The following is|This is)[^.]*[.!:]\s*", re.IGNORECASE),
@@ -179,7 +97,6 @@ def postprocess(raw_text: str) -> str | None:
     if "</think>" in text:
         text = text.split("</think>")[-1].strip()
     elif "<think>" in text:
-        # Model started thinking but never finished (hit max_tokens) -> reject
         return None
 
     if not text:
@@ -278,10 +195,7 @@ async def call_chat_api(
     served_model: str,
     max_tokens_override: int | None = None,
 ) -> dict[str, str | None]:
-    """Send a chat completion request. Returns {content, reasoning_content}.
-
-    Uses only a user message (no system prompt per DeepSeek-R1 guidelines).
-    """
+    """Send a chat completion request. Returns {content, reasoning_content}."""
     url = f"{cfg.generate.server_url}/v1/chat/completions"
     payload = {
         "model": served_model,
@@ -312,7 +226,6 @@ async def call_completions_api(
 ) -> str | None:
     """Send a completions request with <think> prefix. Returns raw text."""
     url = f"{cfg.generate.server_url}/v1/completions"
-    # Prepend <think>\n to enforce reasoning mode per DeepSeek-R1 guidelines
     full_prompt = f"<think>\n{prompt}"
     payload = {
         "model": served_model,
@@ -340,7 +253,6 @@ async def generate_one(
     """Generate an abstract from a prompt. Returns cleaned text or None."""
     if cfg.generate.use_chat_api:
         result = await call_chat_api(prompt, cfg, client, served_model)
-        # If chat API returns separated content, use it directly
         content = result.get("content")
         if content:
             return postprocess(content)
@@ -350,156 +262,6 @@ async def generate_one(
         if raw is None:
             return None
         return postprocess(raw)
-
-
-# ---------------------------------------------------------------------------
-# Verification
-# ---------------------------------------------------------------------------
-
-
-def build_verification_prompt(
-    abstract: str,
-    target_field: str,
-    siblings: list[str],
-    is_nec: bool = False,
-    detailed_fields_map: dict[str, list[str]] | None = None,
-) -> str:
-    """Build a verification prompt to check if the abstract maps to the target field."""
-    if is_nec:
-        return _build_nec_verification_prompt(
-            abstract, target_field, siblings, detailed_fields_map or {}
-        )
-
-    # Include target + siblings as options (shuffled), with detailed field context
-    options = [target_field] + list(siblings)
-    random.shuffle(options)
-
-    if detailed_fields_map:
-        option_lines = []
-        for o in options:
-            details = detailed_fields_map.get(o, [])
-            if details:
-                detail_str = ", ".join(details[:8])
-                option_lines.append(f"- {o} (covers: {detail_str})")
-            else:
-                option_lines.append(f"- {o}")
-        options_str = "\n".join(option_lines)
-    else:
-        options_str = "\n".join(f"- {o}" for o in options)
-
-    return (
-        f"Given the following academic taxonomy, which major field does this abstract "
-        f"best belong to? Respond with ONLY the field name, exactly as written in the options.\n\n"
-        f"Options:\n{options_str}\n\n"
-        f"Abstract: {abstract}"
-    )
-
-
-def _build_nec_verification_prompt(
-    abstract: str,
-    target_field: str,
-    siblings: list[str],
-    detailed_fields_map: dict[str, list[str]],
-) -> str:
-    """Build verification prompt for NEC fields with detailed taxonomy context."""
-    # Build sibling options with their detailed fields
-    sibling_sections = []
-    for s in siblings:
-        details = detailed_fields_map.get(s, [])
-        if details:
-            detail_str = ", ".join(details[:8])  # cap to avoid prompt explosion
-            sibling_sections.append(f"- {s} (covers: {detail_str})")
-        else:
-            sibling_sections.append(f"- {s}")
-    siblings_str = "\n".join(sibling_sections)
-
-    # Show what the NEC field covers
-    nec_details = detailed_fields_map.get(target_field, [])
-    nec_detail_str = ", ".join(nec_details[:10]) if nec_details else target_field
-    nec_section = f"- {target_field} (covers: {nec_detail_str})"
-
-    return (
-        f"Given the following academic taxonomy, which category does this abstract "
-        f"best belong to?\n\n"
-        f"Named major fields:\n{siblings_str}\n\n"
-        f"Residual/other category:\n{nec_section}\n\n"
-        f"Respond with ONLY the field name exactly as written above.\n\n"
-        f"Abstract: {abstract}"
-    )
-
-
-def parse_verification_response(
-    response_text: str,
-    target_field: str,
-    siblings: list[str],
-    is_nec: bool = False,
-) -> bool:
-    """Parse verification response. Returns True if verification passes.
-
-    Uses fuzzy matching: checks if target field appears in response,
-    and that no sibling field appears instead.
-    """
-    if not response_text:
-        return False
-
-    cleaned = response_text.strip().strip('"').strip("'").strip()
-    # Remove any thinking artifacts
-    if "</think>" in cleaned:
-        cleaned = cleaned.split("</think>")[-1].strip()
-
-    cleaned_lower = cleaned.lower()
-    target_lower = target_field.lower()
-
-    # Exact match (ideal case)
-    if cleaned_lower == target_lower:
-        return True
-
-    # Check if target field name appears in the response
-    if target_lower in cleaned_lower:
-        # Make sure a sibling isn't also mentioned (ambiguous response)
-        for sib in siblings:
-            if sib.lower() in cleaned_lower:
-                return False
-        return True
-
-    # If the response matches a sibling exactly, it's a clear failure
-    for sib in siblings:
-        if cleaned_lower == sib.lower() or sib.lower() in cleaned_lower:
-            return False
-
-    # Response doesn't match target or any sibling — treat as failure
-    return False
-
-
-async def verify_abstract(
-    abstract: str,
-    target_field: str,
-    siblings: list[str],
-    is_nec: bool,
-    cfg: PipelineConfig,
-    client: httpx.AsyncClient,
-    served_model: str,
-    detailed_fields_map: dict[str, list[str]] | None = None,
-) -> bool:
-    """Run adversarial verification on a generated abstract."""
-    prompt = build_verification_prompt(
-        abstract, target_field, siblings, is_nec, detailed_fields_map
-    )
-
-    # Verification needs far fewer tokens — just thinking + a field name
-    # 1024 is generous for a classification decision
-    if cfg.generate.use_chat_api:
-        result = await call_chat_api(
-            prompt, cfg, client, served_model, max_tokens_override=1024
-        )
-        response_text = result.get("content", "")
-    else:
-        raw = await call_completions_api(prompt, cfg, client, served_model)
-        response_text = postprocess(raw) if raw else ""
-
-    return parse_verification_response(
-        response_text or "", target_field, siblings, is_nec
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -517,10 +279,7 @@ async def process_cip_program(
     debug_log: Path,
     detailed_fields_map: dict[str, list[str]] | None = None,
 ) -> dict | None:
-    """Generate and verify a single abstract for a CIP program.
-
-    Retries up to max_retries on failure.
-    """
+    """Generate and verify a single abstract for a CIP program."""
     cip_title = cip_record["SED_CIPTitle"]
     cip_definition = cip_record["CIPDefinition"]
     major_field = cip_record["Major_Field_label"]
@@ -533,7 +292,6 @@ async def process_cip_program(
         async with semaphore:
             t0 = time.time()
 
-            # Build and send generation prompt
             prompt = build_prompt(
                 cip_title=cip_title,
                 cip_definition=cip_definition,
@@ -546,7 +304,6 @@ async def process_cip_program(
             abstract = await generate_one(prompt, cfg, client, served_model)
             elapsed = time.time() - t0
 
-            # Debug logging
             debug_entry = {
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "cip_title": cip_title,
@@ -567,7 +324,6 @@ async def process_cip_program(
                 _append_debug(debug_log, debug_entry)
                 continue
 
-            # Verification
             verified = await verify_abstract(
                 abstract, major_field, siblings, is_nec, cfg, client, served_model,
                 detailed_fields_map=detailed_fields_map,
@@ -581,7 +337,6 @@ async def process_cip_program(
             if not verified and attempt < cfg.generate.max_retries:
                 continue
 
-            # Return result (even if verification failed on final attempt -- record it)
             return {
                 "abstract": abstract,
                 "major_field": major_field,
@@ -600,16 +355,13 @@ async def process_cip_program(
 
 async def _run_generation(cfg: PipelineConfig, project_root: Path) -> None:
     """Main async generation loop."""
-    # Wait for server
     await wait_for_server(cfg.generate.server_url)
     served_model = await get_served_model_name(cfg.generate.server_url)
 
-    # Load data
     cip_programs = load_taxonomy(cfg, project_root)
     sibling_map = load_sibling_map(cfg, project_root)
     detailed_fields_map = build_detailed_fields_map(cip_programs)
 
-    # Prepare output
     output_dir = cfg.resolve_path(cfg.generate.output_dir, project_root)
     output_dir.mkdir(parents=True, exist_ok=True)
     raw_path = output_dir / "abstracts_raw.jsonl"
@@ -621,13 +373,11 @@ async def _run_generation(cfg: PipelineConfig, project_root: Path) -> None:
         existing = load_jsonl(raw_path)
         logger.info("Resuming: %d abstracts already generated", len(existing))
 
-    # Track what's already been generated per CIP program
     done_counts: dict[str, int] = {}
     for rec in existing:
         title = rec.get("cip_title", "")
         done_counts[title] = done_counts.get(title, 0) + 1
 
-    # Build work items: each CIP program x samples_per_cip
     rng = random.Random(cfg.generate.seed)
 
     work_items: list[dict] = []
@@ -655,13 +405,11 @@ async def _run_generation(cfg: PipelineConfig, project_root: Path) -> None:
         cfg.generate.samples_per_cip,
     )
 
-    # Generate with bounded concurrency
     semaphore = asyncio.Semaphore(cfg.generate.concurrency)
     all_results = list(existing)
-    checkpoint_interval = 64  # Save every N completions
+    checkpoint_interval = 64
 
     async with httpx.AsyncClient() as client:
-        # Process in chunks for checkpointing
         for chunk_start in range(0, len(work_items), checkpoint_interval):
             chunk = work_items[chunk_start : chunk_start + checkpoint_interval]
 
@@ -683,7 +431,6 @@ async def _run_generation(cfg: PipelineConfig, project_root: Path) -> None:
             new_results = [r for r in results if r is not None]
             all_results.extend(new_results)
 
-            # Checkpoint
             save_jsonl(all_results, raw_path)
             completed = min(chunk_start + checkpoint_interval, len(work_items))
             verified_count = sum(1 for r in all_results if r.get("verified", False))
@@ -692,7 +439,6 @@ async def _run_generation(cfg: PipelineConfig, project_root: Path) -> None:
                 completed, len(work_items), len(all_results), verified_count,
             )
 
-    # Final stats
     all_results = deduplicate(all_results)
     save_jsonl(all_results, raw_path)
     verified_count = sum(1 for r in all_results if r.get("verified", False))
@@ -752,7 +498,7 @@ def load_jsonl(path: Path) -> list[dict]:
 
 
 def run(cfg: PipelineConfig, project_root: Path) -> None:
-    """Generate synthetic abstracts (entry point for CLI)."""
+    """Generate synthetic abstracts (entry point)."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -761,7 +507,7 @@ def run(cfg: PipelineConfig, project_root: Path) -> None:
 
 
 def run_split(cfg: PipelineConfig, project_root: Path) -> None:
-    """Split generated abstracts into train/test sets (entry point for CLI)."""
+    """Split generated abstracts into train/test sets."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -777,7 +523,6 @@ def run_split(cfg: PipelineConfig, project_root: Path) -> None:
     records = load_jsonl(raw_path)
     logger.info("Loaded %d records for splitting", len(records))
 
-    # Stratified split by major field
     rng = random.Random(cfg.generate.seed)
     by_field: dict[str, list[dict]] = {}
     for rec in records:
