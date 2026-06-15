@@ -6,7 +6,7 @@
 |---|----------|---|---|---|---|---|---|
 | | | Major Acc | Broad Acc | Macro F1 | Major Acc | Broad Acc | Macro F1 |
 |---|----------|-----------|-----------|----------|-----------|-----------|----------|
-| B0 | FAISS baseline (CIP defs) | — | — | — | 0.29 | ~0.50 | — |
+| B0 | FAISS baseline (CIP defs) | 0.5224 | 0.5560 | 0.4363 | 0.3431 | 0.5981 | 0.1713 |
 | B1 | kNN on synthetic abstracts | 0.8564 | 0.8661 | 0.8500 | 0.2592 | 0.4265 | 0.1580 |
 | B2 | TF-IDF + LogReg | 0.8219 | 0.8355 | 0.8403 | 0.2485 | 0.4212 | 0.1353 |
 | B3 | Embedding head (frozen + MLP) | 0.8858 | 0.8959 | 0.8701 | 0.1962 | 0.3644 | 0.1111 |
@@ -22,18 +22,25 @@
 
 ### B0. FAISS Baseline (CIP Definitions)
 
-- **Date:** 2025 (prior work)
+- **Date:** 2026-06-15
 - **Encoder:** `BAAI/bge-large-en-v1.5`
-- **Method:** Embed CIP taxonomy entries → FAISS index, embed abstracts → top-10 nearest neighbors → majority vote on major field
-- **Training data:** None (zero-shot retrieval from taxonomy)
+- **Method:** Embed CIP taxonomy entries (2,355 vectors) → FAISS index, embed abstracts → top-10 nearest neighbors → majority vote on major field
+- **Training data:** None (zero-shot retrieval from taxonomy definitions)
 
 | Dataset | Major Acc | Broad Acc | Macro F1 | Top-3 Acc | Top-5 Acc |
-|---------|-----------|-----------|----------|-----------|-----------|
-| Real TACC | 0.29 | ~0.50 | — | — | — |
+|---------|-----------|-----------|----------|-----------|----------|
+| Synthetic test (n=4054) | 0.5224 | 0.5560 | 0.4363 | 0.8592 | 0.9262 |
+| Real TACC (n=16209) | 0.3431 | 0.5981 | 0.1713 | 0.5351 | 0.6069 |
 
 **Notes:**
-- Matching abstracts to definitions is inherently hard — definitions are terse
-- Serves as the "before" measurement
+- **B0 is the best on real TACC so far** — 34.3% major, 59.8% broad beats all synthetic-trained models
+- Synthetic test is only 52% — CIP definitions don't match synthetic abstract language well
+- But real TACC has 60% broad accuracy — taxonomy definitions are actually more aligned with real abstracts
+- Top-3 real TACC at 53.5%, Top-5 at 60.7% — correct field is often in the neighborhood
+- Confusion is between semantically close fields: Materials↔Physics, Chemistry↔Biochem, CS↔CS-other
+- Mechanical Engineering (n=933) gets 0% — consistently the hardest field across all approaches
+- Zero-shot with no training data, yet beats B1-B3 on real data — confirms synthetic-trained models overfit
+- This reframes the problem: **learn to improve B0, not replace it**
 
 ---
 
