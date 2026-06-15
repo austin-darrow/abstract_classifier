@@ -46,7 +46,7 @@ def zeroshot_llm_classify(
     model: str | None = None,
     server_url: str | None = None,
     temperature: float = 0.0,
-    max_tokens: int = 100,
+    max_tokens: int = 2048,
     concurrency: int = 8,
     max_samples: int | None = None,
 ) -> "PredictionSet":
@@ -159,15 +159,25 @@ def zeroshot_llm_classify(
         # Try to parse JSON from response
         predicted_major = ""
         try:
-            # Handle potential markdown wrapping
             clean = response.strip()
+            # Strip <think>...</think> reasoning blocks (DeepSeek-R1 style)
+            if "<think>" in clean:
+                # Take everything after the last </think>
+                parts = clean.split("</think>")
+                clean = parts[-1].strip() if len(parts) > 1 else clean
+            # Handle markdown code block wrapping
             if clean.startswith("```"):
                 clean = clean.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+            # Try to find JSON object in the remaining text
+            json_start = clean.find("{")
+            json_end = clean.rfind("}") + 1
+            if json_start >= 0 and json_end > json_start:
+                clean = clean[json_start:json_end]
             parsed = json.loads(clean)
             predicted_major = parsed.get("major_field", "")
-        except (json.JSONDecodeError, KeyError):
+        except (json.JSONDecodeError, KeyError, IndexError):
             # Try to find a field name in the response
-            for mf in valid_majors:
+            for mf in sorted(valid_majors, key=len, reverse=True):
                 if mf.lower() in response.lower():
                     predicted_major = mf
                     break

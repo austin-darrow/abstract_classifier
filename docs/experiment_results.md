@@ -11,7 +11,7 @@
 | B2 | TF-IDF + LogReg | 0.8219 | 0.8355 | 0.8403 | 0.2485 | 0.4212 | 0.1353 |
 | B3 | Embedding head (frozen + MLP) | 0.8858 | 0.8959 | 0.8701 | 0.1962 | 0.3644 | 0.1111 |
 | B4 | SetFit | | | | | | |
-| B5 | SciBERT fine-tune | | | | | | |
+| B5 | SciBERT fine-tune | 0.9077 | 0.9171 | 0.8428 | 0.3228 | 0.5295 | 0.1775 |
 | B6 | Zero-shot LLM (ceiling) | | | | | | |
 
 **Targets:** Major ≥ 0.70, Broad ≥ 0.90 on real TACC abstracts.
@@ -146,21 +146,28 @@
 
 ### B5. Full Fine-Tune (SciBERT / DeBERTa)
 
-- **Date:**
-- **Model:**
+- **Date:** 2026-06-15
+- **Model:** `allenai/scibert_scivocab_uncased`
 - **Method:** Full encoder fine-tune + classification head via HuggingFace Trainer
-- **Training data:** ~18,800 synthetic abstracts
-- **Hyperparams:** lr=, warmup_ratio=, weight_decay=, max_length=, epochs=, batch_size=, early_stopping_patience=
+- **Training data:** 16,183 synthetic abstracts (14,564 train / 1,619 val)
+- **Hyperparams:** lr=2e-5, warmup_ratio=0.1, weight_decay=0.01, max_length=512, epochs=3, batch_size=16, early_stopping_patience=3
 
 | Dataset | Major Acc | Broad Acc | Macro F1 | Top-3 Acc | Top-5 Acc |
-|---------|-----------|-----------|----------|-----------|-----------|
-| Synthetic test | | | | | |
-| Real TACC | | | | | |
+|---------|-----------|-----------|----------|-----------|----------|
+| Synthetic test (n=4054) | 0.9077 | 0.9171 | 0.8428 | 0.9899 | 0.9951 |
+| Real TACC (n=16209) | 0.3228 | 0.5295 | 0.1775 | 0.4899 | 0.5799 |
 
 **Notes:**
+- Best synthetic accuracy (90.8%) — full fine-tune clearly separates synthetic classes best
+- Real TACC (32.3% major, 53.0% broad) still below B0 baseline (34.3% / 59.8%)
+- Trained in only 108 seconds on GH200 — extremely fast
+- Epoch progression: val_acc 82.4% → 89.0% → 90.6% (no overfitting within 3 epochs)
+- Same Mechanical Engineering (n=933) at 0% F1 pattern — structurally hard field
+- Confusion is semantically reasonable: ME→Physics, Materials→Physics, CS→Technology
+- Full fine-tune adapts the encoder but still can't bridge the synthetic→real gap
+- **B0 remains the real-TACC leader** — the problem isn't model capacity, it's training distribution
 
-
-**Decision:** ☐ Meets targets → STOP | ☐ Continue to B6
+**Decision:** ☐ Meets targets → STOP | ☒ Continue to B6
 
 ---
 
