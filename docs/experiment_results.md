@@ -8,7 +8,7 @@
 |---|----------|-----------|-----------|----------|-----------|-----------|----------|
 | B0 | FAISS baseline (CIP defs) | — | — | — | 0.29 | ~0.50 | — |
 | B1 | kNN on synthetic abstracts | 0.8564 | 0.8661 | 0.8500 | 0.2592 | 0.4265 | 0.1580 |
-| B2 | TF-IDF + LogReg | | | | | | |
+| B2 | TF-IDF + LogReg | 0.8219 | 0.8355 | 0.8403 | 0.2485 | 0.4212 | 0.1353 |
 | B3 | Embedding head (frozen + MLP) | | | | | | |
 | B4 | SetFit | | | | | | |
 | B5 | SciBERT fine-tune | | | | | | |
@@ -65,20 +65,26 @@
 
 ### B2. TF-IDF + Logistic Regression
 
-- **Date:**
-- **Method:** TF-IDF vectorization + LogisticRegression
-- **Training data:** ~18,800 synthetic abstracts
-- **Hyperparams:** max_features=50000, ngram_range=(1,2), max_iter=1000, class_weight=balanced
+- **Date:** 2026-06-15
+- **Method:** TF-IDF vectorization + LogisticRegression (class_weight=balanced, solver=lbfgs)
+- **Training data:** 16,183 synthetic abstracts
+- **Hyperparams:** max_features=50000, ngram_range=(1,2), max_iter=1000, sublinear_tf=True
 
 | Dataset | Major Acc | Broad Acc | Macro F1 | Top-3 Acc | Top-5 Acc |
-|---------|-----------|-----------|----------|-----------|-----------|
-| Synthetic test | | | | | |
-| Real TACC | | | | | |
+|---------|-----------|-----------|----------|-----------|----------|
+| Synthetic test (n=4054) | 0.8219 | 0.8355 | 0.8403 | 0.9763 | 0.9919 |
+| Real TACC (n=16209) | 0.2485 | 0.4212 | 0.1353 | 0.3682 | 0.4356 |
 
 **Notes:**
+- Synthetic test slightly lower than B1 kNN (82% vs 86% major) — kNN benefits from exact embedding matches
+- Real TACC (25% major) comparable to B1 (26%) — both hampered by same domain gap
+- Massive "Health sciences, other" attractor on real data — CS, biochem, neuro, physics all flowing into it
+- Many fields get 0% F1 on real data (Bioinformatics n=559, Education n=53, etc.)
+- Confusion pattern differs from B1: B2 has Health Sciences gravity well; B1 had Technology bias
+- Top-5 real TACC (44%) identical to B1 — confirms ceiling for approaches trained only on synthetic data
+- Training: ~5 seconds end-to-end (no GPU needed)
 
-
-**Decision:** ☐ Meets targets → STOP | ☐ Continue to B3
+**Decision:** ☐ Meets targets → STOP | ☒ Continue to B3
 
 ---
 

@@ -236,6 +236,243 @@ def tfidf(cfg, project_root, test_data, output_dir) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Embedding Head baseline (B3)
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@_config_options
+@click.option("--test-data", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Test data path (JSONL or Excel). Defaults to synthetic test set.")
+@click.option("--output-dir", type=click.Path(path_type=Path), default=None,
+              help="Directory to save predictions.")
+@click.option("--hidden-dim", type=int, default=None, help="MLP hidden dimension.")
+@click.option("--epochs", type=int, default=None, help="Training epochs.")
+@click.option("--lr", type=float, default=None, help="Learning rate.")
+def embedding_head(cfg, project_root, test_data, output_dir, hidden_dim, epochs, lr) -> None:
+    """Run frozen encoder + MLP head classifier (B3)."""
+    from .baselines.embedding_head import embedding_head_classify
+    from .evaluation.metrics import compute_metrics, print_metrics
+    from .evaluation.predictions import PredictionSet
+
+    if output_dir is None:
+        output_dir = project_root / "output" / "predictions"
+
+    kwargs = {}
+    if hidden_dim is not None:
+        kwargs["hidden_dim"] = hidden_dim
+    if epochs is not None:
+        kwargs["epochs"] = epochs
+    if lr is not None:
+        kwargs["lr"] = lr
+
+    # Synthetic test
+    pred_set = embedding_head_classify(cfg, project_root, dataset_name="synthetic_test", **kwargs)
+    metrics = compute_metrics(pred_set)
+    print_metrics(metrics)
+    pred_set.save(output_dir / f"predictions_{pred_set.model_name}_synthetic_test.json")
+    metrics.save(output_dir / f"metrics_{pred_set.model_name}_synthetic_test.json")
+
+    # Real TACC
+    real_path = test_data or cfg.resolve_path(cfg.paths.abstracts_excel, project_root)
+    if real_path.exists():
+        pred_set_real = embedding_head_classify(
+            cfg, project_root, test_path=real_path, dataset_name="real_tacc", **kwargs,
+        )
+        labeled = [p for p in pred_set_real.predictions if p.true_major_field]
+        pred_set_labeled = PredictionSet(
+            model_name=pred_set_real.model_name,
+            predictions=labeled,
+            dataset="real_tacc",
+            metadata=pred_set_real.metadata,
+        )
+        metrics_real = compute_metrics(pred_set_labeled)
+        print_metrics(metrics_real)
+        pred_set_real.save(output_dir / f"predictions_{pred_set_real.model_name}_real_tacc.json")
+        metrics_real.save(output_dir / f"metrics_{pred_set_real.model_name}_real_tacc.json")
+
+
+# ---------------------------------------------------------------------------
+# SetFit baseline (B4)
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@_config_options
+@click.option("--test-data", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Test data path (JSONL or Excel). Defaults to synthetic test set.")
+@click.option("--output-dir", type=click.Path(path_type=Path), default=None,
+              help="Directory to save predictions.")
+@click.option("--num-iterations", type=int, default=None, help="Contrastive training iterations.")
+@click.option("--num-epochs", type=int, default=None, help="Fine-tuning epochs.")
+@click.option("--max-samples-per-class", type=int, default=None,
+              help="Cap training samples per class (speeds up training).")
+def setfit(cfg, project_root, test_data, output_dir, num_iterations, num_epochs, max_samples_per_class) -> None:
+    """Run SetFit contrastive fine-tuning classifier (B4)."""
+    from .baselines.setfit_classify import setfit_classify
+    from .evaluation.metrics import compute_metrics, print_metrics
+    from .evaluation.predictions import PredictionSet
+
+    if output_dir is None:
+        output_dir = project_root / "output" / "predictions"
+
+    kwargs = {}
+    if num_iterations is not None:
+        kwargs["num_iterations"] = num_iterations
+    if num_epochs is not None:
+        kwargs["num_epochs"] = num_epochs
+    if max_samples_per_class is not None:
+        kwargs["max_samples_per_class"] = max_samples_per_class
+
+    # Synthetic test
+    pred_set = setfit_classify(cfg, project_root, dataset_name="synthetic_test", **kwargs)
+    metrics = compute_metrics(pred_set)
+    print_metrics(metrics)
+    pred_set.save(output_dir / f"predictions_{pred_set.model_name}_synthetic_test.json")
+    metrics.save(output_dir / f"metrics_{pred_set.model_name}_synthetic_test.json")
+
+    # Real TACC
+    real_path = test_data or cfg.resolve_path(cfg.paths.abstracts_excel, project_root)
+    if real_path.exists():
+        pred_set_real = setfit_classify(
+            cfg, project_root, test_path=real_path, dataset_name="real_tacc", **kwargs,
+        )
+        labeled = [p for p in pred_set_real.predictions if p.true_major_field]
+        pred_set_labeled = PredictionSet(
+            model_name=pred_set_real.model_name,
+            predictions=labeled,
+            dataset="real_tacc",
+            metadata=pred_set_real.metadata,
+        )
+        metrics_real = compute_metrics(pred_set_labeled)
+        print_metrics(metrics_real)
+        pred_set_real.save(output_dir / f"predictions_{pred_set_real.model_name}_real_tacc.json")
+        metrics_real.save(output_dir / f"metrics_{pred_set_real.model_name}_real_tacc.json")
+
+
+# ---------------------------------------------------------------------------
+# Full fine-tune (B5)
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@_config_options
+@click.option("--test-data", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Test data path (JSONL or Excel). Defaults to synthetic test set.")
+@click.option("--output-dir", type=click.Path(path_type=Path), default=None,
+              help="Directory to save predictions.")
+@click.option("--model-name", type=str, default=None,
+              help="HF model to fine-tune (default: allenai/scibert_scivocab_uncased).")
+@click.option("--epochs", type=int, default=3, help="Training epochs.")
+@click.option("--lr", type=float, default=2e-5, help="Learning rate.")
+@click.option("--batch-size", type=int, default=16, help="Per-device batch size.")
+def finetune(cfg, project_root, test_data, output_dir, model_name, epochs, lr, batch_size) -> None:
+    """Run full encoder fine-tune classifier (B5)."""
+    from .baselines.finetune import finetune_classify
+    from .evaluation.metrics import compute_metrics, print_metrics
+    from .evaluation.predictions import PredictionSet
+
+    if output_dir is None:
+        output_dir = project_root / "output" / "predictions"
+
+    kwargs = {"epochs": epochs, "lr": lr, "batch_size": batch_size}
+    if model_name is not None:
+        kwargs["model_name_or_path"] = model_name
+
+    # Synthetic test
+    pred_set = finetune_classify(cfg, project_root, dataset_name="synthetic_test", **kwargs)
+    metrics = compute_metrics(pred_set)
+    print_metrics(metrics)
+    pred_set.save(output_dir / f"predictions_{pred_set.model_name}_synthetic_test.json")
+    metrics.save(output_dir / f"metrics_{pred_set.model_name}_synthetic_test.json")
+
+    # Real TACC
+    real_path = test_data or cfg.resolve_path(cfg.paths.abstracts_excel, project_root)
+    if real_path.exists():
+        pred_set_real = finetune_classify(
+            cfg, project_root, test_path=real_path, dataset_name="real_tacc", **kwargs,
+        )
+        labeled = [p for p in pred_set_real.predictions if p.true_major_field]
+        pred_set_labeled = PredictionSet(
+            model_name=pred_set_real.model_name,
+            predictions=labeled,
+            dataset="real_tacc",
+            metadata=pred_set_real.metadata,
+        )
+        metrics_real = compute_metrics(pred_set_labeled)
+        print_metrics(metrics_real)
+        pred_set_real.save(output_dir / f"predictions_{pred_set_real.model_name}_real_tacc.json")
+        metrics_real.save(output_dir / f"metrics_{pred_set_real.model_name}_real_tacc.json")
+
+
+# ---------------------------------------------------------------------------
+# Zero-shot LLM (B6)
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@_config_options
+@click.option("--test-data", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Test data path (JSONL or Excel). Defaults to synthetic test set.")
+@click.option("--output-dir", type=click.Path(path_type=Path), default=None,
+              help="Directory to save predictions.")
+@click.option("--model-name", type=str, default=None, help="LLM model name.")
+@click.option("--server-url", type=str, default=None, help="OpenAI-compatible API URL.")
+@click.option("--max-samples", type=int, default=None, help="Cap samples for cost control.")
+@click.option("--concurrency", type=int, default=8, help="Concurrent API requests.")
+def zeroshot(cfg, project_root, test_data, output_dir, model_name, server_url, max_samples, concurrency) -> None:
+    """Run zero-shot LLM classifier (B6)."""
+    from .baselines.zeroshot_llm import zeroshot_llm_classify
+    from .evaluation.metrics import compute_metrics, print_metrics
+    from .evaluation.predictions import PredictionSet
+
+    if output_dir is None:
+        output_dir = project_root / "output" / "predictions"
+
+    kwargs = {"concurrency": concurrency}
+    if model_name is not None:
+        kwargs["model"] = model_name
+    if server_url is not None:
+        kwargs["server_url"] = server_url
+    if max_samples is not None:
+        kwargs["max_samples"] = max_samples
+
+    # Synthetic test
+    if test_data:
+        test_path = test_data
+    else:
+        test_path = None
+
+    pred_set = zeroshot_llm_classify(
+        cfg, project_root, test_path=test_path, dataset_name="synthetic_test" if not test_data else "real_tacc",
+        **kwargs,
+    )
+    metrics = compute_metrics(pred_set)
+    print_metrics(metrics)
+    pred_set.save(output_dir / f"predictions_{pred_set.model_name}_{pred_set.dataset}.json")
+    metrics.save(output_dir / f"metrics_{pred_set.model_name}_{pred_set.dataset}.json")
+
+    # If no explicit test data, also run on real TACC
+    if not test_data:
+        real_path = cfg.resolve_path(cfg.paths.abstracts_excel, project_root)
+        if real_path.exists():
+            pred_set_real = zeroshot_llm_classify(
+                cfg, project_root, test_path=real_path, dataset_name="real_tacc", **kwargs,
+            )
+            labeled = [p for p in pred_set_real.predictions if p.true_major_field]
+            pred_set_labeled = PredictionSet(
+                model_name=pred_set_real.model_name,
+                predictions=labeled,
+                dataset="real_tacc",
+                metadata=pred_set_real.metadata,
+            )
+            metrics_real = compute_metrics(pred_set_labeled)
+            print_metrics(metrics_real)
+            pred_set_real.save(output_dir / f"predictions_{pred_set_real.model_name}_real_tacc.json")
+            metrics_real.save(output_dir / f"metrics_{pred_set_real.model_name}_real_tacc.json")
+
+
+# ---------------------------------------------------------------------------
 # Visualize
 # ---------------------------------------------------------------------------
 
