@@ -163,6 +163,131 @@ def classify(cfg: PipelineConfig, project_root: Path) -> None:
     print("Done.")
 
 
+# ---------------------------------------------------------------------------
+# B0: FAISS retrieval baseline (CIP definitions) — evaluation framework version
+# ---------------------------------------------------------------------------
+
+
+def baseline_classify(
+    cfg: PipelineConfig,
+    project_root: Path,
+    test_path: Path | None = None,
+    dataset_name: str = "real_tacc",
+) -> "PredictionSet":
+    """Classify using CIP definition FAISS index (B0), returning PredictionSet.
+
+    This wraps the original baseline into the evaluation framework for
+    comparable metrics against B1-B6.
+
+    Args:
+        cfg: Pipeline config.
+        project_root: Project root directory.
+        test_path: Path to test data (Excel or JSONL). Defaults to abstracts_excel.
+        dataset_name: Name for the prediction set.
+
+    Returns:
+        PredictionSet with predictions for all test abstracts.
+    """
+    from ..evaluation.predictions import Prediction, PredictionSet
+
+    device = cfg.get_device()
+
+    # Build major→broad mapping from taxonomy
+    taxonomy_path = cfg.resolve_path(cfg.paths.taxonomy_json, project_root)
+    taxonomy = load_json(taxonomy_path)
+    major_to_broad = {}
+    for entry in taxonomy:
+        major_to_broad.setdefault(entry["Major_Field_label"], entry["Broad_Field_label"])
+
+    # Load (or build) the CIP definition index
+    index_path = cfg.resolve_path(cfg.paths.faiss_index, project_root)
+    metadata_path = cfg.resolve_path(cfg.paths.index_metadata, project_root)
+
+    if not index_path.exists():
+        print("CIP index not found, building...")
+        build_index(cfg, project_root)
+
+    index = load_faiss_index(index_path)
+    metadata = load_json(metadata_path)
+    print(f"Loaded CIP definition index: {index.ntotal} vectors")
+
+    # Load test data
+    if test_path is None:
+        test_path = cfg.resolve_path(cfg.paths.abstracts_excel, project_root)
+    test_records = _load_test_data(test_path, major_to_broad)
+    print(f"Loaded {len(test_records)} test abstracts from {test_path}")
+
+    # Embed test abstracts
+    model = load_model(cfg.models.query_encoder, device)
+    batch_size = cfg.runtime.batch_size or cfg.classify.batch_size
+    test_texts = [r["abstract"] for r in test_records]
+    print(f"Encoding {len(test_texts)} test abstracts...")
+    test_embeddings = encode_texts(
+        model, test_texts, batch_size=batch_size,
+        prefix=cfg.models.query_prefix, mode="query",
+    )
+
+    # Query FAISS
+    top_k = cfg.classify.top_k
+    print(f"Querying top-{top_k} nearest CIP definitions...")
+    similarities, indices = index.search(test_embeddings, top_k)
+
+    # Build predictions via majority vote
+    predictions = []
+    for i in range(len(test_records)):
+        top_k_indices = indices[i]
+        top_k_sims = similarities[i]
+        top_k_major = [metadata[idx]["Major_Field_label"] for idx in top_k_indices]
+        top_k_broad = [metadata[idx]["Broad_Field_label"] for idx in top_k_indices]
+
+        # Majority vote for major field
+        major_counts = Counter(top_k_major)
+        predicted_major = major_counts.most_common(1)[0][0]
+
+        # Majority vote for broad field
+        broad_counts = Counter(top_k_broad)
+        predicted_broad = broad_counts.most_common(1)[0][0]
+
+        # Confidence = agreement ratio
+        confidence = major_counts[predicted_major] / top_k
+
+        # Top-k unique major fields by first occurrence
+        seen = []
+        scores = []
+        for mf, sim in zip(top_k_major, top_k_sims):
+            if mf not in seen:
+                seen.append(mf)
+                scores.append(float(sim))
+
+        predictions.append(Prediction(
+            abstract=test_records[i]["abstract"],
+            true_major_field=test_records[i].get("major_field", ""),
+            true_broad_field=test_records[i].get("broad_field", ""),
+            predicted_major_field=predicted_major,
+            predicted_broad_field=predicted_broad,
+            confidence=confidence,
+            top_k_major_fields=seen,
+            top_k_scores=scores,
+        ))
+
+    encoder_name = cfg.models.index_encoder.split("/")[-1]
+    pred_set = PredictionSet(
+        model_name=f"baseline_cip_defs_{encoder_name}_k{top_k}",
+        predictions=predictions,
+        dataset=dataset_name,
+        metadata={
+            "encoder": cfg.models.index_encoder,
+            "top_k": top_k,
+            "index_size": index.ntotal,
+            "n_test": len(test_records),
+            "method": "FAISS retrieval from CIP definitions",
+        },
+    )
+
+    print(f"Baseline classification complete: {len(predictions)} predictions")
+    return pred_set
+
+
 def run_all(cfg: PipelineConfig, project_root: Path) -> None:
     """Run the full baseline pipeline: parse → build-index → classify → evaluate."""
     from ..data.taxonomy import run as parse_run

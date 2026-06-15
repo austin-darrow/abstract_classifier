@@ -9,7 +9,7 @@
 | B0 | FAISS baseline (CIP defs) | — | — | — | 0.29 | ~0.50 | — |
 | B1 | kNN on synthetic abstracts | 0.8564 | 0.8661 | 0.8500 | 0.2592 | 0.4265 | 0.1580 |
 | B2 | TF-IDF + LogReg | 0.8219 | 0.8355 | 0.8403 | 0.2485 | 0.4212 | 0.1353 |
-| B3 | Embedding head (frozen + MLP) | | | | | | |
+| B3 | Embedding head (frozen + MLP) | 0.8858 | 0.8959 | 0.8701 | 0.1962 | 0.3644 | 0.1111 |
 | B4 | SetFit | | | | | | |
 | B5 | SciBERT fine-tune | | | | | | |
 | B6 | Zero-shot LLM (ceiling) | | | | | | |
@@ -90,18 +90,27 @@
 
 ### B3. Embedding Head (Frozen Encoder + MLP)
 
-- **Date:**
-- **Encoder:**
-- **Method:** Frozen SentenceTransformer embeddings → 2-layer MLP head
-- **Training data:** ~18,800 synthetic abstracts
-- **Hyperparams:** hidden_dim=, dropout=, lr=, epochs=, batch_size=
+- **Date:** 2026-06-15
+- **Encoder:** `BAAI/bge-large-en-v1.5` (frozen)
+- **Method:** Frozen SentenceTransformer embeddings → 2-layer MLP head (256→256→74)
+- **Training data:** 16,183 synthetic abstracts
+- **Hyperparams:** hidden_dim=256, dropout=0.1, lr=0.001, epochs=20, batch_size=64
 
 | Dataset | Major Acc | Broad Acc | Macro F1 | Top-3 Acc | Top-5 Acc |
-|---------|-----------|-----------|----------|-----------|-----------|
-| Synthetic test | | | | | |
-| Real TACC | | | | | |
+|---------|-----------|-----------|----------|-----------|----------|
+| Synthetic test (n=4054) | 0.8858 | 0.8959 | 0.8701 | 0.9933 | 0.9990 |
+| Real TACC (n=16209) | 0.1962 | 0.3644 | 0.1111 | 0.3431 | 0.4279 |
 
 **Notes:**
+- Best synthetic test score so far (88.6% major) — MLP learns better boundaries than kNN/TF-IDF within-domain
+- Real TACC is WORST so far (19.6% major, 36.4% broad) — **overfits harder to synthetic distribution**
+- MLP memorizes synthetic patterns that don't transfer: Technology attractor pulls CS/ME, Microbiology pulls Biochem
+- "Biological and biomedical sciences, general" (n=566) again 0% — a consistent failure across all approaches
+- Training converged to 90% train acc in 20 epochs — not underfitting, just domain-shifted
+- The non-linear decision boundary hurts generalization compared to simpler B1/B2 on OOD data
+- Confirms: more expressive model on synthetic-only data = more overfitting to synthetic quirks
+
+**Decision:** ☐ Meets targets → STOP | ☒ Continue to B4
 
 
 **Decision:** ☐ Meets targets → STOP | ☐ Continue to B4
