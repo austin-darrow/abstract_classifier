@@ -191,3 +191,164 @@ def run_all(cfg: PipelineConfig, project_root: Path) -> None:
     print("\n" + "=" * 60)
     print("PIPELINE COMPLETE")
     print("=" * 60)
+
+
+# ---------------------------------------------------------------------------
+# B1: kNN on synthetic abstracts
+# ---------------------------------------------------------------------------
+
+
+def knn_classify(
+    cfg: PipelineConfig,
+    project_root: Path,
+    train_path: Path | None = None,
+    test_path: Path | None = None,
+    dataset_name: str = "synthetic_test",
+    top_k: int | None = None,
+) -> "PredictionSet":
+    """Embed synthetic training abstracts, build FAISS index, classify test set via kNN.
+
+    Args:
+        cfg: Pipeline config.
+        project_root: Project root directory.
+        train_path: Path to training JSONL. Defaults to config train_data.
+        test_path: Path to test JSONL (or Excel for real TACC data).
+        dataset_name: Name for the prediction set (e.g. "synthetic_test", "real_tacc").
+        top_k: Number of neighbors for majority vote. Defaults to cfg.classify.top_k.
+
+    Returns:
+        PredictionSet with predictions for all test abstracts.
+    """
+    import json
+
+    from ..evaluation.predictions import Prediction, PredictionSet
+
+    device = cfg.get_device()
+    k = top_k or cfg.classify.top_k
+
+    # Load training data
+    if train_path is None:
+        train_path = cfg.resolve_path(cfg.train.train_data, project_root)
+    train_records = _load_jsonl(train_path)
+    print(f"Loaded {len(train_records)} training abstracts from {train_path}")
+
+    # Load test data
+    if test_path is None:
+        test_path = cfg.resolve_path(cfg.train.test_data, project_root)
+    test_records = _load_test_data(test_path)
+    print(f"Loaded {len(test_records)} test abstracts from {test_path}")
+
+    # Embed training abstracts
+    model = load_model(cfg.models.index_encoder, device)
+    batch_size = cfg.runtime.batch_size or cfg.index.batch_size
+
+    train_texts = [r["abstract"] for r in train_records]
+    train_labels = [r["major_field"] for r in train_records]
+    train_broad = [r["broad_field"] for r in train_records]
+
+    print(f"Encoding {len(train_texts)} training abstracts...")
+    train_embeddings = encode_texts(model, train_texts, batch_size=batch_size, mode="document")
+
+    # Build FAISS index
+    index = build_faiss_index(train_embeddings)
+    print(f"Built FAISS index: {index.ntotal} vectors")
+
+    # Embed test abstracts
+    test_texts = [r["abstract"] for r in test_records]
+    print(f"Encoding {len(test_texts)} test abstracts...")
+    test_embeddings = encode_texts(
+        model, test_texts, batch_size=batch_size,
+        prefix=cfg.models.query_prefix, mode="query",
+    )
+
+    # Query
+    print(f"Querying top-{k} nearest neighbors...")
+    similarities, indices = index.search(test_embeddings, k)
+
+    # Build predictions via majority vote
+    predictions = []
+    for i in range(len(test_records)):
+        top_k_indices = indices[i]
+        top_k_sims = similarities[i]
+        top_k_major = [train_labels[idx] for idx in top_k_indices]
+        top_k_broad = [train_broad[idx] for idx in top_k_indices]
+
+        # Majority vote for major field
+        major_counts = Counter(top_k_major)
+        predicted_major = major_counts.most_common(1)[0][0]
+
+        # Majority vote for broad field
+        broad_counts = Counter(top_k_broad)
+        predicted_broad = broad_counts.most_common(1)[0][0]
+
+        # Confidence = agreement ratio
+        confidence = major_counts[predicted_major] / k
+
+        # Top-k unique major fields by first occurrence
+        seen = []
+        scores = []
+        for mf, sim in zip(top_k_major, top_k_sims):
+            if mf not in seen:
+                seen.append(mf)
+                scores.append(float(sim))
+
+        predictions.append(Prediction(
+            abstract=test_records[i]["abstract"],
+            true_major_field=test_records[i].get("major_field", ""),
+            true_broad_field=test_records[i].get("broad_field", ""),
+            predicted_major_field=predicted_major,
+            predicted_broad_field=predicted_broad,
+            confidence=confidence,
+            top_k_major_fields=seen,
+            top_k_scores=scores,
+        ))
+
+    encoder_name = cfg.models.index_encoder.split("/")[-1]
+    pred_set = PredictionSet(
+        model_name=f"knn_synth_{encoder_name}_k{k}",
+        predictions=predictions,
+        dataset=dataset_name,
+        metadata={
+            "encoder": cfg.models.index_encoder,
+            "top_k": k,
+            "n_train": len(train_records),
+            "n_test": len(test_records),
+        },
+    )
+
+    print(f"kNN classification complete: {len(predictions)} predictions")
+    return pred_set
+
+
+def _load_jsonl(path: Path) -> list[dict]:
+    """Load records from a JSONL file."""
+    import json
+    records = []
+    with open(path) as f:
+        for line in f:
+            if line.strip():
+                records.append(json.loads(line))
+    return records
+
+
+def _load_test_data(path: Path) -> list[dict]:
+    """Load test data from JSONL or Excel (for real TACC abstracts)."""
+    import json
+
+    if path.suffix == ".jsonl":
+        return _load_jsonl(path)
+    elif path.suffix in (".xlsx", ".xls"):
+        df = pd.read_excel(path)
+        records = []
+        for _, row in df.iterrows():
+            abstract = row.get("abstract", "")
+            if pd.isna(abstract) or not abstract.strip():
+                continue
+            records.append({
+                "abstract": str(abstract),
+                "major_field": str(row.get("major_field", "")) if pd.notna(row.get("major_field")) else "",
+                "broad_field": str(row.get("broad_field", "")) if pd.notna(row.get("broad_field")) else "",
+            })
+        return records
+    else:
+        raise ValueError(f"Unsupported test data format: {path.suffix}")
