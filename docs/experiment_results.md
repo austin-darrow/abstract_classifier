@@ -7,7 +7,7 @@
 | | | Major Acc | Broad Acc | Macro F1 | Major Acc | Broad Acc | Macro F1 |
 |---|----------|-----------|-----------|----------|-----------|-----------|----------|
 | B0 | FAISS baseline (CIP defs) | — | — | — | 0.29 | ~0.50 | — |
-| B1 | kNN on synthetic abstracts | | | | | | |
+| B1 | kNN on synthetic abstracts | 0.8564 | 0.8661 | 0.8500 | 0.2592 | (bug) | 0.1580 |
 | B2 | TF-IDF + LogReg | | | | | | |
 | B3 | Embedding head (frozen + MLP) | | | | | | |
 | B4 | SetFit | | | | | | |
@@ -39,21 +39,26 @@
 
 ### B1. kNN on Synthetic Abstracts
 
-- **Date:**
-- **Encoder:**
+- **Date:** 2026-06-15
+- **Encoder:** `BAAI/bge-large-en-v1.5`
 - **Method:** Embed synthetic training abstracts → FAISS index, classify via top-k majority vote
-- **Training data:** ~18,800 synthetic abstracts (10/CIP)
-- **Hyperparams:** top_k=
+- **Training data:** 16,183 synthetic abstracts (10/CIP)
+- **Hyperparams:** top_k=10
 
 | Dataset | Major Acc | Broad Acc | Macro F1 | Top-3 Acc | Top-5 Acc |
 |---------|-----------|-----------|----------|-----------|-----------|
-| Synthetic test | | | | | |
-| Real TACC | | | | | |
+| Synthetic test (n=4054) | 0.8564 | 0.8661 | 0.8500 | 0.9896 | 0.9914 |
+| Real TACC (n=16209) | 0.2592 | ⚠️ 0.00 (bug: no broad_field column) | 0.1580 | 0.4058 | 0.4446 |
 
 **Notes:**
+- Synthetic test accuracy is strong (86%) — embeddings separate well within synthetic domain
+- Real TACC accuracy (26%) is WORSE than B0 baseline (29%) — significant domain gap
+- Top confused pairs on real data: CS/Physics/Materials → "Technology and technical fields" and "Science-related technologies"
+- The kNN is biased toward fields that dominate synthetic data (Technology, Health)
+- Broad field 0.0% was a data loading bug (Excel has no `broad_field` column) — fixed, re-run needed
+- Top-5 on real TACC is 44% — correct field is often in the neighborhood but not majority
 
-
-**Decision:** ☐ Meets targets → STOP | ☐ Continue to B2
+**Decision:** ☐ Meets targets → STOP | ☒ Continue to B2
 
 ---
 

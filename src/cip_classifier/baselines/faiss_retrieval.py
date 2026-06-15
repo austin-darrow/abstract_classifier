@@ -226,6 +226,13 @@ def knn_classify(
     device = cfg.get_device()
     k = top_k or cfg.classify.top_k
 
+    # Build major→broad mapping from taxonomy
+    taxonomy_path = cfg.resolve_path(cfg.paths.taxonomy_json, project_root)
+    taxonomy = load_json(taxonomy_path)
+    major_to_broad = {}
+    for entry in taxonomy:
+        major_to_broad.setdefault(entry["Major_Field_label"], entry["Broad_Field_label"])
+
     # Load training data
     if train_path is None:
         train_path = cfg.resolve_path(cfg.train.train_data, project_root)
@@ -235,7 +242,7 @@ def knn_classify(
     # Load test data
     if test_path is None:
         test_path = cfg.resolve_path(cfg.train.test_data, project_root)
-    test_records = _load_test_data(test_path)
+    test_records = _load_test_data(test_path, major_to_broad)
     print(f"Loaded {len(test_records)} test abstracts from {test_path}")
 
     # Embed training abstracts
@@ -331,12 +338,26 @@ def _load_jsonl(path: Path) -> list[dict]:
     return records
 
 
-def _load_test_data(path: Path) -> list[dict]:
-    """Load test data from JSONL or Excel (for real TACC abstracts)."""
+def _load_test_data(path: Path, major_to_broad: dict[str, str] | None = None) -> list[dict]:
+    """Load test data from JSONL or Excel (for real TACC abstracts).
+
+    Args:
+        path: Path to JSONL or Excel file.
+        major_to_broad: Mapping from major field to broad field. Used to derive
+            broad_field when not present in the data.
+    """
     import json
 
+    if major_to_broad is None:
+        major_to_broad = {}
+
     if path.suffix == ".jsonl":
-        return _load_jsonl(path)
+        records = _load_jsonl(path)
+        # Ensure broad_field is populated
+        for r in records:
+            if not r.get("broad_field") and r.get("major_field"):
+                r["broad_field"] = major_to_broad.get(r["major_field"], "")
+        return records
     elif path.suffix in (".xlsx", ".xls"):
         df = pd.read_excel(path)
         records = []
@@ -344,10 +365,14 @@ def _load_test_data(path: Path) -> list[dict]:
             abstract = row.get("abstract", "")
             if pd.isna(abstract) or not abstract.strip():
                 continue
+            major = str(row.get("major_field", "")) if pd.notna(row.get("major_field")) else ""
+            broad = str(row.get("broad_field", "")) if pd.notna(row.get("broad_field", None)) else ""
+            if not broad and major:
+                broad = major_to_broad.get(major, "")
             records.append({
                 "abstract": str(abstract),
-                "major_field": str(row.get("major_field", "")) if pd.notna(row.get("major_field")) else "",
-                "broad_field": str(row.get("broad_field", "")) if pd.notna(row.get("broad_field")) else "",
+                "major_field": major,
+                "broad_field": broad,
             })
         return records
     else:
