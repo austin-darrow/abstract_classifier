@@ -190,6 +190,52 @@ def knn(cfg, project_root, top_k, test_data, output_dir) -> None:
 
 
 # ---------------------------------------------------------------------------
+# TF-IDF + LogReg baseline (B2)
+# ---------------------------------------------------------------------------
+
+
+@cli.command()
+@_config_options
+@click.option("--test-data", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Test data path (JSONL or Excel). Defaults to synthetic test set.")
+@click.option("--output-dir", type=click.Path(path_type=Path), default=None,
+              help="Directory to save predictions.")
+def tfidf(cfg, project_root, test_data, output_dir) -> None:
+    """Run TF-IDF + Logistic Regression classifier (B2)."""
+    from .baselines.tfidf_logreg import tfidf_classify
+    from .evaluation.metrics import compute_metrics, print_metrics
+    from .evaluation.predictions import PredictionSet
+
+    if output_dir is None:
+        output_dir = project_root / "output" / "predictions"
+
+    # Synthetic test
+    pred_set = tfidf_classify(cfg, project_root, dataset_name="synthetic_test")
+    metrics = compute_metrics(pred_set)
+    print_metrics(metrics)
+    pred_set.save(output_dir / f"predictions_{pred_set.model_name}_synthetic_test.json")
+    metrics.save(output_dir / f"metrics_{pred_set.model_name}_synthetic_test.json")
+
+    # Real TACC
+    real_path = test_data or cfg.resolve_path(cfg.paths.abstracts_excel, project_root)
+    if real_path.exists():
+        pred_set_real = tfidf_classify(
+            cfg, project_root, test_path=real_path, dataset_name="real_tacc",
+        )
+        labeled = [p for p in pred_set_real.predictions if p.true_major_field]
+        pred_set_labeled = PredictionSet(
+            model_name=pred_set_real.model_name,
+            predictions=labeled,
+            dataset="real_tacc",
+            metadata=pred_set_real.metadata,
+        )
+        metrics_real = compute_metrics(pred_set_labeled)
+        print_metrics(metrics_real)
+        pred_set_real.save(output_dir / f"predictions_{pred_set_real.model_name}_real_tacc.json")
+        metrics_real.save(output_dir / f"metrics_{pred_set_real.model_name}_real_tacc.json")
+
+
+# ---------------------------------------------------------------------------
 # Visualize
 # ---------------------------------------------------------------------------
 
