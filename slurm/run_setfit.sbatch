@@ -17,6 +17,7 @@ set -euo pipefail
 
 module load gcc cuda python3
 source "${SCRATCH}/envs/cip_classifier/bin/activate"
+pip install -q "setfit>=1.1" "transformers>=4.40,<4.50" 2>/dev/null || true
 cd "${SLURM_SUBMIT_DIR:-$(dirname "$0")/..}"
 
 echo "=== B4: SetFit Classifier ==="
