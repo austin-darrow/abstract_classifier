@@ -10,7 +10,7 @@
 | B1 | kNN on synthetic abstracts | 0.8564 | 0.8661 | 0.8500 | 0.2592 | 0.4265 | 0.1580 |
 | B2 | TF-IDF + LogReg | 0.8219 | 0.8355 | 0.8403 | 0.2485 | 0.4212 | 0.1353 |
 | B3 | Embedding head (frozen + MLP) | 0.8858 | 0.8959 | 0.8701 | 0.1962 | 0.3644 | 0.1111 |
-| B4 | SetFit | | | | | | |
+| B4 | SetFit | 0.9188 | 0.9265 | 0.8448 | 0.2579 | 0.4424 | 0.1609 |
 | B5 | SciBERT fine-tune | 0.9077 | 0.9171 | 0.8428 | 0.3228 | 0.5295 | 0.1775 |
 | B6 | Zero-shot LLM (ceiling) | 0.1570 | 0.2240 | 0.3062 | 0.3130 | 0.5750 | 0.2534 |
 
@@ -119,28 +119,31 @@
 
 **Decision:** ☐ Meets targets → STOP | ☒ Continue to B4
 
-
-**Decision:** ☐ Meets targets → STOP | ☐ Continue to B4
-
 ---
 
 ### B4. SetFit (Contrastive Fine-Tuning)
 
-- **Date:**
-- **Encoder:**
-- **Method:** Contrastive fine-tune on training pairs → classification head on adapted embeddings
-- **Training data:** ~18,800 synthetic abstracts
-- **Hyperparams:** num_iterations=, num_epochs=
+- **Date:** 2026-06-16
+- **Encoder:** `BAAI/bge-base-en-v1.5`
+- **Method:** Contrastive fine-tune on 647,320 training pairs → LogReg head on adapted embeddings
+- **Training data:** 16,183 synthetic abstracts
+- **Hyperparams:** num_iterations=20, num_epochs=1, batch_size=16
 
 | Dataset | Major Acc | Broad Acc | Macro F1 | Top-3 Acc | Top-5 Acc |
-|---------|-----------|-----------|----------|-----------|-----------|
-| Synthetic test | | | | | |
-| Real TACC | | | | | |
+|---------|-----------|-----------|----------|-----------|----------|
+| Synthetic test (n=4054) | 0.9188 | 0.9265 | 0.8448 | 0.9768 | 0.9845 |
+| Real TACC (n=16209) | 0.2579 | 0.4424 | 0.1609 | 0.4253 | 0.5156 |
 
 **Notes:**
+- Best synthetic accuracy tied with B5 (91.9% vs 90.8%) — contrastive training reshapes embedding space well
+- Real TACC (25.8% major, 44.2% broad) — mid-pack, well below B0 (34.3% / 59.8%)
+- Training took ~2.5 hours on GH200 (647K contrastive pairs at 4.2 it/s)
+- Novel confusion patterns: CS→Interdisciplinary CS, Chemistry→Chemical Engineering, Materials→Science-related Tech
+- SetFit adapts embeddings but still learns synthetic-specific boundaries
+- Computer Science (n=860) gets 0% F1 — completely absorbed by related CS fields
+- 419 UNASSIGNED records all get 0% — expected, no training signal for this
 
-
-**Decision:** ☐ Meets targets → STOP | ☐ Continue to B5
+**Decision:** ☐ Meets targets → STOP | ☒ Continue to B5
 
 ---
 
