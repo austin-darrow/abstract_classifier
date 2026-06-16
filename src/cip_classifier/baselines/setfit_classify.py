@@ -14,39 +14,34 @@ from ..config import PipelineConfig
 from ..utils import load_json
 
 
-def setfit_classify(
+def setfit_train(
     cfg: PipelineConfig,
     project_root: Path,
     train_path: Path | None = None,
-    test_path: Path | None = None,
-    dataset_name: str = "synthetic_test",
     num_iterations: int | None = None,
     num_epochs: int | None = None,
     batch_size: int = 16,
     max_samples_per_class: int | None = None,
-) -> "PredictionSet":
-    """Train SetFit model on synthetic data, classify test set.
+) -> tuple:
+    """Train a SetFit model. Returns (model, label_encoder, major_to_broad, metadata).
 
     Args:
         cfg: Pipeline config.
         project_root: Project root directory.
         train_path: Path to training JSONL.
-        test_path: Path to test JSONL or Excel.
-        dataset_name: Name for the prediction set.
         num_iterations: Number of contrastive training iterations.
         num_epochs: Number of fine-tuning epochs.
         batch_size: Training batch size for contrastive pairs.
         max_samples_per_class: Cap samples per class (None = all data).
 
     Returns:
-        PredictionSet with predictions for all test abstracts.
+        Tuple of (trained_model, label_encoder, major_to_broad, metadata_dict).
     """
     from datasets import Dataset
     from setfit import SetFitModel, Trainer, TrainingArguments
     from sklearn.preprocessing import LabelEncoder
 
-    from ..evaluation.predictions import Prediction, PredictionSet
-    from .faiss_retrieval import _load_jsonl, _load_test_data
+    from .faiss_retrieval import _load_jsonl
 
     num_iterations = num_iterations or cfg.train.setfit_num_iterations or 20
     num_epochs = num_epochs or cfg.train.setfit_num_epochs or 1
@@ -58,20 +53,14 @@ def setfit_classify(
     for entry in taxonomy:
         major_to_broad.setdefault(entry["Major_Field_label"], entry["Broad_Field_label"])
 
-    # Load data
+    # Load training data
     if train_path is None:
         train_path = cfg.resolve_path(cfg.train.train_data, project_root)
     train_records = _load_jsonl(train_path)
     print(f"Loaded {len(train_records)} training abstracts")
 
-    if test_path is None:
-        test_path = cfg.resolve_path(cfg.train.test_data, project_root)
-    test_records = _load_test_data(test_path, major_to_broad)
-    print(f"Loaded {len(test_records)} test abstracts")
-
     train_texts = [r["abstract"] for r in train_records]
     train_labels = [r["major_field"] for r in train_records]
-    test_texts = [r["abstract"] for r in test_records]
 
     # Optionally subsample for speed
     if max_samples_per_class is not None:
@@ -120,10 +109,100 @@ def setfit_classify(
     trainer.train()
     print("Training complete.")
 
-    # Predict
+    # Save trained model
+    model_dir = project_root / "output" / "models" / "setfit"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    model.save_pretrained(str(model_dir))
+    # Save label encoder classes
+    import json
+    with open(model_dir / "label_classes.json", "w") as f:
+        json.dump(le.classes_.tolist(), f)
+    print(f"Saved trained model to {model_dir}")
+
+    metadata = {
+        "encoder": encoder_name,
+        "num_iterations": num_iterations,
+        "num_epochs": num_epochs,
+        "batch_size": batch_size,
+        "n_classes": n_classes,
+        "n_train": len(train_records),
+        "max_samples_per_class": max_samples_per_class,
+    }
+
+    return model, le, major_to_broad, metadata
+
+
+def setfit_load(
+    cfg: PipelineConfig,
+    project_root: Path,
+    model_dir: Path | None = None,
+) -> tuple:
+    """Load a previously trained SetFit model from disk.
+
+    Returns (model, label_encoder, major_to_broad, metadata).
+    """
+    import json
+    from setfit import SetFitModel
+    from sklearn.preprocessing import LabelEncoder
+
+    if model_dir is None:
+        model_dir = project_root / "output" / "models" / "setfit"
+
+    if not model_dir.exists():
+        raise FileNotFoundError(f"No saved SetFit model found at {model_dir}. Train first.")
+
+    print(f"Loading SetFit model from {model_dir}...")
+    model = SetFitModel.from_pretrained(str(model_dir))
+
+    # Load label encoder
+    with open(model_dir / "label_classes.json") as f:
+        classes = json.load(f)
+    le = LabelEncoder()
+    le.classes_ = np.array(classes)
+
+    # Build major→broad mapping
+    taxonomy_path = cfg.resolve_path(cfg.paths.taxonomy_json, project_root)
+    taxonomy = load_json(taxonomy_path)
+    major_to_broad = {}
+    for entry in taxonomy:
+        major_to_broad.setdefault(entry["Major_Field_label"], entry["Broad_Field_label"])
+
+    metadata = {"encoder": "loaded_from_disk", "model_dir": str(model_dir)}
+    print(f"Loaded model with {len(classes)} classes")
+    return model, le, major_to_broad, metadata
+
+
+def setfit_predict(
+    model,
+    le,
+    major_to_broad: dict,
+    test_records: list[dict],
+    dataset_name: str = "synthetic_test",
+    metadata: dict | None = None,
+    num_iterations: int = 20,
+    num_epochs: int = 1,
+) -> "PredictionSet":
+    """Predict on test records using a trained SetFit model.
+
+    Args:
+        model: Trained SetFitModel.
+        le: Fitted LabelEncoder.
+        major_to_broad: Major→broad mapping.
+        test_records: List of dicts with 'abstract', 'major_field', 'broad_field'.
+        dataset_name: Name for the prediction set.
+        metadata: Optional metadata dict from training.
+        num_iterations: Used for model naming.
+        num_epochs: Used for model naming.
+
+    Returns:
+        PredictionSet with predictions.
+    """
+    from ..evaluation.predictions import Prediction, PredictionSet
+
+    test_texts = [r["abstract"] for r in test_records]
+
     print(f"Predicting on {len(test_texts)} test abstracts...")
     preds = model.predict(test_texts)
-    # SetFit returns integer labels
     preds_np = np.array(preds)
     pred_labels = le.inverse_transform(preds_np)
 
@@ -132,7 +211,6 @@ def setfit_classify(
         probs = model.predict_proba(test_texts)
         probs_np = np.array(probs)
     except Exception:
-        # Fallback: no probabilities
         probs_np = None
 
     # Build predictions
@@ -163,21 +241,52 @@ def setfit_classify(
         ))
 
     model_name = f"setfit_{num_iterations}iter_{num_epochs}ep"
+    meta = dict(metadata or {})
+    meta["n_test"] = len(test_records)
     pred_set = PredictionSet(
         model_name=model_name,
         predictions=predictions,
         dataset=dataset_name,
-        metadata={
-            "encoder": encoder_name,
-            "num_iterations": num_iterations,
-            "num_epochs": num_epochs,
-            "batch_size": batch_size,
-            "n_classes": n_classes,
-            "n_train": len(train_records),
-            "n_test": len(test_records),
-            "max_samples_per_class": max_samples_per_class,
-        },
+        metadata=meta,
     )
 
     print(f"SetFit classification complete: {len(predictions)} predictions")
     return pred_set
+
+
+def setfit_classify(
+    cfg: PipelineConfig,
+    project_root: Path,
+    train_path: Path | None = None,
+    test_path: Path | None = None,
+    dataset_name: str = "synthetic_test",
+    num_iterations: int | None = None,
+    num_epochs: int | None = None,
+    batch_size: int = 16,
+    max_samples_per_class: int | None = None,
+) -> "PredictionSet":
+    """Train SetFit model on synthetic data, classify test set (convenience wrapper).
+
+    For running on multiple test sets without re-training, use
+    setfit_train() + setfit_predict() directly.
+    """
+    from .faiss_retrieval import _load_test_data
+
+    model, le, major_to_broad, metadata = setfit_train(
+        cfg, project_root, train_path=train_path,
+        num_iterations=num_iterations, num_epochs=num_epochs,
+        batch_size=batch_size, max_samples_per_class=max_samples_per_class,
+    )
+
+    # Load test data
+    if test_path is None:
+        test_path = cfg.resolve_path(cfg.train.test_data, project_root)
+    test_records = _load_test_data(test_path, major_to_broad)
+    print(f"Loaded {len(test_records)} test abstracts")
+
+    return setfit_predict(
+        model, le, major_to_broad, test_records,
+        dataset_name=dataset_name, metadata=metadata,
+        num_iterations=metadata["num_iterations"],
+        num_epochs=metadata["num_epochs"],
+    )

@@ -12,7 +12,7 @@
 | B3 | Embedding head (frozen + MLP) | 0.8858 | 0.8959 | 0.8701 | 0.1962 | 0.3644 | 0.1111 |
 | B4 | SetFit | | | | | | |
 | B5 | SciBERT fine-tune | 0.9077 | 0.9171 | 0.8428 | 0.3228 | 0.5295 | 0.1775 |
-| B6 | Zero-shot LLM (ceiling) | | | | | | |
+| B6 | Zero-shot LLM (ceiling) | 0.1570 | 0.2240 | 0.3062 | 0.3130 | 0.5750 | 0.2534 |
 
 **Targets:** Major ≥ 0.70, Broad ≥ 0.90 on real TACC abstracts.
 
@@ -173,21 +173,29 @@
 
 ### B6. Zero-Shot LLM (Accuracy Ceiling)
 
-- **Date:**
-- **Model:**
-- **Method:** Prompt with full taxonomy + abstract → parse predicted field name
+- **Date:** 2026-06-15
+- **Model:** `deepseek-ai/DeepSeek-R1-Distill-Qwen-32B`
+- **Method:** Prompt with full taxonomy + abstract → parse predicted field name from JSON response
 - **Training data:** None (zero-shot)
-- **Hyperparams:** temperature=, max_tokens=
+- **Hyperparams:** temperature=0.0, max_tokens=2048, concurrency=16, n=1000 subsample
 
 | Dataset | Major Acc | Broad Acc | Macro F1 | Top-3 Acc | Top-5 Acc |
-|---------|-----------|-----------|----------|-----------|-----------|
-| Synthetic test | | | | | |
-| Real TACC | | | | | |
+|---------|-----------|-----------|----------|-----------|----------|
+| Synthetic test (n=1000) | 0.1570 | 0.2240 | 0.3062 | 0.1570 | 0.1570 |
+| Real TACC (n=1000) | 0.3130 | 0.5750 | 0.2534 | 0.3130 | 0.3130 |
 
 **Notes:**
+- Parse fix worked: 0 errors on synthetic, 6/1000 on real
+- Real TACC (31.3% major, 57.5% broad) — competitive with B0 (34.3%/59.8%) but doesn't beat it
+- Synthetic is terrible (15.7%) — model predicts wrong taxonomy names ("Computer and information sciences" vs exact taxonomy labels)
+- Massive CS attractor: everything gets classified into CS/CompSci variants
+- Confusions are between genuinely close fields: CS↔CS-other, Chemistry↔Materials, Physics↔Materials
+- Top-3/5 = Top-1 since LLM only produces one prediction per call (no probabilities)
+- The 32B distill is NOT a good ceiling — would need full R1 (671B) or GPT-4 for true ceiling
+- Even so, simple FAISS retrieval (B0) matches or beats a 32B reasoning model
+- Cost: ~1000 API calls × 2K tokens = expensive for marginal accuracy
 
-
-**Decision:** ☐ Meets targets → STOP | ☐ Proceed to Phase C
+**Decision:** ☒ None meet targets → Proceed to Phase C (improve B0)
 
 ---
 

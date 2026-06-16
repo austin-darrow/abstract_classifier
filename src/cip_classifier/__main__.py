@@ -353,9 +353,11 @@ def embedding_head(cfg, project_root, test_data, output_dir, hidden_dim, epochs,
 @click.option("--num-epochs", type=int, default=None, help="Fine-tuning epochs.")
 @click.option("--max-samples-per-class", type=int, default=None,
               help="Cap training samples per class (speeds up training).")
-def setfit(cfg, project_root, test_data, output_dir, num_iterations, num_epochs, max_samples_per_class) -> None:
+@click.option("--predict-only", is_flag=True, help="Load saved model, skip training.")
+def setfit(cfg, project_root, test_data, output_dir, num_iterations, num_epochs, max_samples_per_class, predict_only) -> None:
     """Run SetFit contrastive fine-tuning classifier (B4)."""
-    from .baselines.setfit_classify import setfit_classify
+    from .baselines.setfit_classify import setfit_train, setfit_predict, setfit_load
+    from .baselines.faiss_retrieval import _load_test_data
     from .evaluation.metrics import compute_metrics, print_metrics
     from .evaluation.predictions import PredictionSet
 
@@ -370,8 +372,23 @@ def setfit(cfg, project_root, test_data, output_dir, num_iterations, num_epochs,
     if max_samples_per_class is not None:
         kwargs["max_samples_per_class"] = max_samples_per_class
 
+    # Train or load
+    if predict_only:
+        model, le, major_to_broad, metadata = setfit_load(cfg, project_root)
+    else:
+        model, le, major_to_broad, metadata = setfit_train(cfg, project_root, **kwargs)
+
     # Synthetic test
-    pred_set = setfit_classify(cfg, project_root, dataset_name="synthetic_test", **kwargs)
+    synth_test_path = cfg.resolve_path(cfg.train.test_data, project_root)
+    synth_records = _load_test_data(synth_test_path, major_to_broad)
+    print(f"Loaded {len(synth_records)} synthetic test abstracts")
+    n_iter = metadata.get("num_iterations", num_iterations or 20)
+    n_ep = metadata.get("num_epochs", num_epochs or 1)
+    pred_set = setfit_predict(
+        model, le, major_to_broad, synth_records,
+        dataset_name="synthetic_test", metadata=metadata,
+        num_iterations=n_iter, num_epochs=n_ep,
+    )
     metrics = compute_metrics(pred_set)
     print_metrics(metrics)
     pred_set.save(output_dir / f"predictions_{pred_set.model_name}_synthetic_test.json")
@@ -380,8 +397,12 @@ def setfit(cfg, project_root, test_data, output_dir, num_iterations, num_epochs,
     # Real TACC
     real_path = test_data or cfg.resolve_path(cfg.paths.abstracts_excel, project_root)
     if real_path.exists():
-        pred_set_real = setfit_classify(
-            cfg, project_root, test_path=real_path, dataset_name="real_tacc", **kwargs,
+        real_records = _load_test_data(real_path, major_to_broad)
+        print(f"Loaded {len(real_records)} real TACC abstracts")
+        pred_set_real = setfit_predict(
+            model, le, major_to_broad, real_records,
+            dataset_name="real_tacc", metadata=metadata,
+            num_iterations=n_iter, num_epochs=n_ep,
         )
         labeled = [p for p in pred_set_real.predictions if p.true_major_field]
         pred_set_labeled = PredictionSet(
