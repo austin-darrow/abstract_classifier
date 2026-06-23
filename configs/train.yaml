@@ -2,8 +2,8 @@
 # Use with: python scripts/train_classifier.py --config configs/data.yaml configs/train.yaml
 
 train:
-  model_type: embedding_head  # "embedding_head" or "setfit"
-  encoder: BAAI/bge-base-en-v1.5
+  model_type: setfit  # "setfit" or "finetune"
+  encoder: BAAI/bge-large-en-v1.5
   train_data: data/generated/train.jsonl
   test_data: data/generated/test.jsonl
   output_dir: output/models

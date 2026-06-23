@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CIP Classifier — Sprint Update</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #1a1a1a;
+    line-height: 1.7;
+    font-size: 15px;
+    background: #fff;
+  }
+
+  .container {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 40px 24px 64px;
+  }
+
+  h1 {
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .date {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 28px;
+  }
+
+  h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-top: 40px;
+    margin-bottom: 8px;
+  }
+
+  p { margin-bottom: 16px; }
+
+  /* Chart wrapper */
+  .chart-box {
+    background: #f8f8fa;
+    border-radius: 8px;
+    padding: 20px 20px 12px;
+    margin: 24px 0;
+    border: 1px solid #e8e8ec;
+  }
+
+  .chart-box .chart-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .chart-box canvas {
+    width: 100% !important;
+    height: 300px !important;
+  }
+
+  /* Experiment cards */
+  .experiments { display: flex; flex-direction: column; gap: 14px; margin: 20px 0; }
+
+  .exp-card {
+    padding: 12px 16px;
+    border-radius: 6px;
+    border: 1px solid #eee;
+  }
+
+  .exp-card.winner {
+    background: #fef9ee;
+    border-color: #f0dca0;
+  }
+
+  .exp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .exp-name { font-weight: 600; font-size: 14px; }
+
+  .exp-result {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    color: #3b6fd4;
+  }
+
+  .exp-card.winner .exp-result { color: #b47a00; }
+
+  .exp-desc {
+    font-size: 14px;
+    color: #555;
+    margin-top: 3px;
+  }
+
+  /* Next steps */
+  ul {
+    padding-left: 22px;
+    margin-bottom: 24px;
+  }
+
+  li { margin-bottom: 8px; }
+
+  strong { font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>CIP Classifier — Sprint Update</h1>
+  <div class="date">June 18, 2026</div>
+
+  <p>
+    I generated ~18,800
+    synthetic training abstracts using DeepSeek-R1 on Vista, built a standardized
+    evaluation framework with comparison tooling, and ran 7 different classification
+    approaches against a synthetic test set and 16k real TACC proposals. Real-data accuracy is still low
+    across the board, but I question whether the real TACC labels are even reliable enough
+    to evaluate against.
+  </p>
+
+  <h2>Experiments</h2>
+
+  <p>
+    Every approach was evaluated the same way: train (if applicable) on the synthetic
+    abstracts, then measure accuracy on the real TACC proposals.
+  </p>
+
+  <div class="chart-box">
+    <div class="chart-title">Major Field Accuracy — Synthetic vs. Real</div>
+    <canvas id="chart"></canvas>
+  </div>
+
+  <div class="experiments">
+    <div class="exp-card winner">
+      <div class="exp-header">
+        <span class="exp-name">B0 — Dictionary Lookup</span>
+        <span class="exp-result">34.3% major, 59.8% broad</span>
+      </div>
+      <div class="exp-desc">Match abstracts against the CIP field definitions using embedding similarity — no training data at all.</div>
+    </div>
+
+    <div class="exp-card">
+      <div class="exp-header">
+        <span class="exp-name">B1 — kNN on Synthetic Abstracts</span>
+        <span class="exp-result">25.9% major, 42.7% broad</span>
+      </div>
+      <div class="exp-desc">Embed the synthetic training set, classify real abstracts by majority vote of their nearest neighbors.</div>
+    </div>
+
+    <div class="exp-card">
+      <div class="exp-header">
+        <span class="exp-name">B2 — TF-IDF + Logistic Regression</span>
+        <span class="exp-result">24.9% major, 42.1% broad</span>
+      </div>
+      <div class="exp-desc">Classic bag-of-words features with a linear classifier — trains in about 5 seconds.</div>
+    </div>
+
+    <div class="exp-card">
+      <div class="exp-header">
+        <span class="exp-name">B3 — Frozen Encoder + MLP</span>
+        <span class="exp-result">19.6% major, 36.4% broad — worst of the bunch</span>
+      </div>
+      <div class="exp-desc">Freeze a pretrained language model and train a small neural network head on top of its embeddings.</div>
+    </div>
+
+    <div class="exp-card">
+      <div class="exp-header">
+        <span class="exp-name">B4 — SetFit (Contrastive Learning)</span>
+        <span class="exp-result">25.8% major, 44.2% broad</span>
+      </div>
+      <div class="exp-desc">Fine-tune the embedding model itself using ~647K contrastive training pairs, then fit a classifier on the adapted embeddings.</div>
+    </div>
+
+    <div class="exp-card">
+      <div class="exp-header">
+        <span class="exp-name">B5 — SciBERT Fine-Tune</span>
+        <span class="exp-result">32.3% major, 53.0% broad</span>
+      </div>
+      <div class="exp-desc">Full end-to-end fine-tune of a scientific language model with a classification head.</div>
+    </div>
+
+    <div class="exp-card">
+      <div class="exp-header">
+        <span class="exp-name">B6 — Zero-Shot LLM</span>
+        <span class="exp-result">31.3% major, 57.5% broad</span>
+      </div>
+      <div class="exp-desc">Hand the full CIP taxonomy to a 32B language model and ask it to pick — no training data.</div>
+    </div>
+  </div>
+
+  <h2>Next Steps</h2>
+
+  <p><strong>The big question is whether the real TACC labels are even trustworthy.</strong></p>
+    <p>
+      Before spending more time on classifier improvements, I need to manually
+      review a subset of the real TACC data — look at what the classifier is actually
+      predicting, compare it to the ground truth label, and judge which one is wrong.
+      If the real TACC labels are noisy (which I know we have assumed is highly likely), that puts a hard ceiling on any approach's measured
+      accuracy regardless of how good the model is as long as we are using that as a measure of success. In other words,
+      we may need to just redefine what success looks like.
+    </p>
+
+  <p><strong>Experiment improvements:</strong></p>
+  <ul>
+        <li>
+      Several fields get 0% F1 across <em>every single approach</em> — Mechanical
+      Engineering (933 abstracts) is the biggest. I need to dig into why.
+    </li>
+    <li>
+      Some of these experiments have obvious room to grow. SetFit (B4) used a weaker
+      base model (bge-base vs. bge-large in the other approaches) — worth re-running
+      with the stronger encoder, especially as this seems like one of the most promising approaches. The 419 UNASSIGNED records should just be filtered
+      out. With fixes like these I think some approaches could get close to perfect
+      on synthetic major fields, which would at least confirm the models are working
+      as expected on clean data.
+    </li>
+    <li>
+      A hierarchical approach is worth investigating more seriously — classify into
+      broad field first (22 classes), then narrow to major field within each broad
+      field. The broad field numbers are already substantially higher across the board.
+    </li>
+    <li>
+      Based on what we've seen, we can probably eliminate a few of the weaker
+      approaches and focus effort on the more
+      promising ones.
+    </li>
+  </ul>
+
+</div>
+
+<script>
+const labels = ['B0', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6'];
+const synth  = [52.2, 85.6, 82.2, 88.6, 91.9, 90.8, 15.7];
+const real   = [34.3, 25.9, 24.9, 19.6, 25.8, 32.3, 31.3];
+
+const realColors = real.map((_, i) => i === 0 ? '#e0930b' : '#3b6fd4');
+
+new Chart(document.getElementById('chart'), {
+  type: 'bar',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: 'Synthetic Test',
+        data: synth,
+        backgroundColor: '#93b5f1',
+        borderRadius: 3,
+        barPercentage: 0.7,
+        categoryPercentage: 0.7,
+      },
+      {
+        label: 'Real TACC',
+        data: real,
+        backgroundColor: realColors,
+        borderRadius: 3,
+        barPercentage: 0.7,
+        categoryPercentage: 0.7,
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      y: {
+        min: 0,
+        max: 100,
+        ticks: {
+          callback: v => v + '%',
+          color: '#666',
+          font: { size: 12 },
+        },
+        grid: { color: '#e0e0e4' },
+        border: { display: false },
+      },
+      x: {
+        ticks: { color: '#666', font: { size: 12 } },
+        grid: { display: false },
+        border: { color: '#ccc' },
+      },
+    },
+    plugins: {
+      legend: {
+        position: 'top',
+        align: 'end',
+        labels: {
+          boxWidth: 10,
+          boxHeight: 10,
+          color: '#666',
+          font: { size: 12 },
+          // Use the first color from each dataset for the legend swatch
+          generateLabels: function(chart) {
+            return chart.data.datasets.map((ds, i) => ({
+              text: ds.label,
+              fillStyle: i === 0 ? '#93b5f1' : '#3b6fd4',
+              strokeStyle: 'transparent',
+              lineWidth: 0,
+              datasetIndex: i,
+              hidden: !chart.isDatasetVisible(i),
+            }));
+          },
+        },
+      },
+      tooltip: {
+        backgroundColor: '#1a1a2e',
+        titleColor: '#e0e0e0',
+        bodyColor: '#e0e0e0',
+        borderColor: '#333',
+        borderWidth: 1,
+        cornerRadius: 6,
+        padding: 10,
+        callbacks: {
+          label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y + '%',
+        },
+      },
+    },
+  },
+});
+</script>
+</body>
+</html>
