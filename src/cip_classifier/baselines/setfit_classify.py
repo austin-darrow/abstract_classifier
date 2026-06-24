@@ -94,16 +94,18 @@ def setfit_train(
     # Create SetFit model
     model = SetFitModel.from_pretrained(encoder_name)
 
+    # Cast to bf16 to halve GPU memory usage
+    if use_bf16:
+        import torch
+        model.model_body = model.model_body.to(torch.bfloat16)
+        print("Using bf16 mixed precision")
+
     # Training arguments
-    train_kwargs = dict(
+    args = TrainingArguments(
         batch_size=batch_size,
         num_iterations=num_iterations,
         num_epochs=num_epochs,
     )
-    if use_bf16:
-        train_kwargs["bf16"] = True
-        print("Using bf16 mixed precision")
-    args = TrainingArguments(**train_kwargs)
 
     trainer = Trainer(
         model=model,
