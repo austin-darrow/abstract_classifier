@@ -357,10 +357,11 @@ def embedding_head(cfg, project_root, test_data, output_dir, hidden_dim, epochs,
               help="Directory to save predictions.")
 @click.option("--num-iterations", type=int, default=None, help="Contrastive training iterations.")
 @click.option("--num-epochs", type=int, default=None, help="Fine-tuning epochs.")
+@click.option("--batch-size", type=int, default=None, help="Contrastive pair batch size (default 16).")
 @click.option("--max-samples-per-class", type=int, default=None,
               help="Cap training samples per class (speeds up training).")
 @click.option("--predict-only", is_flag=True, help="Load saved model, skip training.")
-def setfit(cfg, project_root, train_data, test_data, output_dir, num_iterations, num_epochs, max_samples_per_class, predict_only) -> None:
+def setfit(cfg, project_root, train_data, test_data, output_dir, num_iterations, num_epochs, batch_size, max_samples_per_class, predict_only) -> None:
     """Run SetFit contrastive fine-tuning classifier (B4)."""
     from .baselines.setfit_classify import setfit_train, setfit_predict, setfit_load
     from .baselines.faiss_retrieval import _load_test_data
@@ -375,6 +376,8 @@ def setfit(cfg, project_root, train_data, test_data, output_dir, num_iterations,
         kwargs["num_iterations"] = num_iterations
     if num_epochs is not None:
         kwargs["num_epochs"] = num_epochs
+    if batch_size is not None:
+        kwargs["batch_size"] = batch_size
     if max_samples_per_class is not None:
         kwargs["max_samples_per_class"] = max_samples_per_class
 

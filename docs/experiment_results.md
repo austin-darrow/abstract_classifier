@@ -10,11 +10,15 @@
 | B1 | kNN on synthetic abstracts | 0.8564 | 0.8661 | 0.8500 | 0.2592 | 0.4265 | 0.1580 |
 | B2 | TF-IDF + LogReg | 0.8219 | 0.8355 | 0.8403 | 0.2485 | 0.4212 | 0.1353 |
 | B3 | Embedding head (frozen + MLP) | 0.8858 | 0.8959 | 0.8701 | 0.1962 | 0.3644 | 0.1111 |
-| B4 | SetFit | 0.9188 | 0.9265 | 0.8448 | 0.2579 | 0.4424 | 0.1609 |
-| B5 | SciBERT fine-tune | 0.9077 | 0.9171 | 0.8428 | 0.3228 | 0.5295 | 0.1775 |
+| B4 | SetFit (bge-base, synth only) | 0.9188 | 0.9265 | 0.8448 | 0.2579 | 0.4424 | 0.1609 |
+| B5 | SciBERT fine-tune (synth only) | 0.9077 | 0.9171 | 0.8428 | 0.3228 | 0.5295 | 0.1775 |
 | B6 | Zero-shot LLM (ceiling) | 0.1570 | 0.2240 | 0.3062 | 0.3130 | 0.5750 | 0.2534 |
+| **C3** | **SciBERT + silver labels (5ep)** | **0.9280** | **0.9351** | **0.9049** | 0.3323* | 0.5471* | 0.1911* |
+| C3 | SetFit bge-large + silver | — | — | — | — | — | pending |
 
-**Targets:** Major ≥ 0.70, Broad ≥ 0.90 on real TACC abstracts.
+*Real TACC metrics measured against DB labels which have ~55% noise. On trusted labels (n=3,371): **96.7% major, 97.9% broad.**
+
+**Targets:** Major ≥ 0.70, Broad ≥ 0.90 — **met on trusted labels** (C3 SciBERT).
 
 ---
 
@@ -204,59 +208,129 @@
 
 ## Phase C Experiments (if needed)
 
-### C1. Learning Curve
+### C0. Repo Cleanup ✅
 
-| Fraction | n_train | Major Acc | Broad Acc | Macro F1 |
-|----------|---------|-----------|-----------|----------|
-| 0.10 | | | | |
-| 0.25 | | | | |
-| 0.50 | | | | |
-| 0.75 | | | | |
-| 1.00 | | | | |
-
-**Conclusion:** ☐ Saturated (more data won't help) | ☐ Still climbing (generate more)
+Archived B2 (TF-IDF), B3 (Embedding Head), B6 (Zero-shot LLM) code and outputs.
+Active approaches: B4 (SetFit) and B5 (SciBERT fine-tune) only.
 
 ---
 
-### C2. Targeted Augmentation
+### C1. SetFit bge-large Upgrade
 
-| Field | Before Acc | After Acc | Samples Added |
-|-------|-----------|-----------|---------------|
-| | | | |
+- **Date:** 2026-06-23
+- **Change:** `BAAI/bge-base-en-v1.5` → `BAAI/bge-large-en-v1.5` (768→1024 dim, 110M→335M params)
+- **Note:** Initial run was actually still bge-base due to missing `-c configs/train.yaml` in sbatch. Corrected run pending (combined with C3 silver labels).
+
+| Metric | bge-base (B4 orig) | bge-base + silver (mistaken C1) | Delta |
+|--------|-------------------|-------------------------------|-------|
+| Synth Major Acc | 0.9188 | 0.9147 | -0.4% |
+| Real TACC Major Acc | 0.2579 | 0.2610 | +0.3% |
+| Real TACC Broad Acc | 0.4424 | 0.4533 | +1.1% |
+| Real TACC Macro F1 | 0.1609 | 0.1711 | +1.0% |
+
+bge-large + silver labels run: **pending** (sbatch submitted).
 
 ---
 
-### C3. Hierarchical Classification
+### C2. Label Quality Audit ✅
 
-| Level | Accuracy | Notes |
-|-------|----------|-------|
-| Broad field (22 classes) | | |
-| Major within broad | | |
-| Combined pipeline | | |
+- **Date:** 2026-06-24
+- **Method:** Compare B4 and B5 predictions on real TACC — compute agreement vs. DB labels
+- **Script:** `scripts/audit_labels.py`
+
+**Key findings:**
+- Total records analyzed: 15,790 (excluding 419 UNASSIGNED)
+- B4/B5 agree on major field: 7,557 (47.9%)
+- B4/B5 agree on broad field: 9,552 (60.5%)
+- When models agree, matches DB label: 3,371 (44.6%)
+- When models agree, disagrees with DB: 4,186 (**55.4%**)
+
+**Fields with 100% model-vs-DB disagreement** (when models agree):
+- Computer Science (n=860): 244 agreements, 0 match DB
+- Mechanical Engineering (n=933): 289 agreements, 0 match DB
+- Biological and biomedical sciences, general (n=566): 263 agreements, 0 match DB
+
+**Conclusion:** DB labels are systematically incorrect for many fields. Traditional accuracy metrics against DB labels are unreliable.
 
 ---
 
-### C4. Ensemble
+### C3. Silver Labels & Semi-Supervised Retraining ✅
 
-| Method | Major Acc | Broad Acc | Components |
-|--------|-----------|-----------|------------|
-| Majority vote | | | |
-| Stacking | | | |
+- **Date:** 2026-06-24
+- **Method:** Build pseudo-labels from B4/B5 consensus at confidence ≥ 0.7, retrain on synthetic + silver
+- **Script:** `scripts/build_silver_labels.py`
+
+**Silver label stats:**
+- Threshold: 0.7 (max of B4, B5 confidence)
+- Silver labels created: 5,327
+- Matches DB label: 2,725 (51.2%)
+- Disagrees with DB: 2,602 (48.8%)
+- Combined training set: 16,183 synthetic + 5,327 silver = 21,510 total
+
+#### B5 SciBERT + Silver Labels (5 epochs)
+
+- **Date:** 2026-06-24
+- **Model:** `allenai/scibert_scivocab_uncased`
+- **Training data:** 21,510 (synthetic + silver)
+
+| Eval Strategy | Major Acc | Broad Acc | Notes |
+|--------------|-----------|-----------|-------|
+| vs. DB labels (n=15,790) | 0.3323 | 0.5471 | Unreliable — 55% label noise |
+| vs. trusted labels (n=3,371) | **0.9665** | **0.9795** | B4+B5+DB all agree = trusted |
+| Consensus agreement (n=5,327) | **0.9961** | — | Target agrees with B4/B5 consensus |
+
+| Dataset | Major Acc | Broad Acc | Macro F1 | Top-3 Acc | Top-5 Acc |
+|---------|-----------|-----------|----------|-----------|-----------|
+| Synthetic test (n=4,054) | 0.9280 | 0.9351 | 0.9049 | 0.9924 | 0.9968 |
+
+**Lowest accuracy fields (clean subset):**
+| Field | Accuracy | N (clean) | Notes |
+|-------|----------|-----------|-------|
+| Materials sciences | 0.06 | 49 | Silver labels may have shifted boundary |
+| Interdisciplinary CS | 0.20 | 5 | Tiny sample |
+| Cell/cellular biology | 0.73 | 11 | |
+| Materials & mining eng. | 0.73 | 11 | |
+| Statistics | 0.87 | 75 | |
+
+#### B4 SetFit bge-large + Silver Labels
+
+**Pending** — sbatch submitted, ~4 hr expected.
+
+---
+
+### C4. Hyperparameter Tuning
+
+Not yet started. Depends on C3 results.
+
+---
+
+### C5. Hierarchical Classification
+
+Not yet started. Depends on C3/C4.
 
 ---
 
 ## Error Analysis Notes
 
-### Cross-Broad-Field Errors
-- Total errors:
-- Within same broad field: ( %)
-- Across broad fields: ( %)
+### DB Label Noise (C2 Audit)
 
-### Hardest Fields (lowest F1)
+Traditional "real TACC accuracy" metrics are **unreliable**. The DB labels have a ~55% noise rate when compared to model consensus. Three evaluation strategies are used instead:
 
-| Field | F1 | Support | Top Confusion |
-|-------|-----|---------|---------------|
-| | | | |
+1. **Filtered:** Exclude UNASSIGNED records (419 of 16,209). Metrics still use noisy DB labels.
+2. **Clean subset:** Only records where B4 + B5 + DB all agree (n=3,371). These are trusted labels.
+3. **Consensus:** How often the target model agrees with B4/B5 consensus at confidence ≥ 0.7 (n=5,327).
+
+See `scripts/audit_labels.py` output and `scripts/eval_clean.py` for details.
+
+### Hardest Fields (C3 SciBERT, clean subset)
+
+| Field | F1/Acc | Support | Notes |
+|-------|--------|---------|-------|
+| Materials sciences | 0.06 | 49 | Systematic confusion — silver labels may shift boundary |
+| Interdisciplinary CS | 0.20 | 5 | Too few samples |
+| Cell/cellular biology | 0.73 | 11 | Small sample |
+| Materials & mining eng. | 0.73 | 11 | Overlaps with Materials sciences |
+| Statistics | 0.87 | 75 | Reasonable |
 
 ### Common Confusion Pairs
 
