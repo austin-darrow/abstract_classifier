@@ -82,8 +82,8 @@ class GenerateConfig(BaseModel):
 
 
 class TrainConfig(BaseModel):
-    model_type: str = "embedding_head"  # "embedding_head" or "setfit"
-    encoder: str = "BAAI/bge-base-en-v1.5"
+    model_type: str = "setfit"  # "setfit" or "finetune"
+    encoder: str = "BAAI/bge-large-en-v1.5"
     train_data: str = "data/generated/train.jsonl"
     test_data: str = "data/generated/test.jsonl"
     output_dir: str = "output/models"
