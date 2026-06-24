@@ -345,6 +345,8 @@ def embedding_head(cfg, project_root, test_data, output_dir, hidden_dim, epochs,
 
 @cli.command()
 @_config_options
+@click.option("--train-data", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Training data path (JSONL). Defaults to config train_data.")
 @click.option("--test-data", type=click.Path(exists=True, path_type=Path), default=None,
               help="Test data path (JSONL or Excel). Defaults to synthetic test set.")
 @click.option("--output-dir", type=click.Path(path_type=Path), default=None,
@@ -354,7 +356,7 @@ def embedding_head(cfg, project_root, test_data, output_dir, hidden_dim, epochs,
 @click.option("--max-samples-per-class", type=int, default=None,
               help="Cap training samples per class (speeds up training).")
 @click.option("--predict-only", is_flag=True, help="Load saved model, skip training.")
-def setfit(cfg, project_root, test_data, output_dir, num_iterations, num_epochs, max_samples_per_class, predict_only) -> None:
+def setfit(cfg, project_root, train_data, test_data, output_dir, num_iterations, num_epochs, max_samples_per_class, predict_only) -> None:
     """Run SetFit contrastive fine-tuning classifier (B4)."""
     from .baselines.setfit_classify import setfit_train, setfit_predict, setfit_load
     from .baselines.faiss_retrieval import _load_test_data
@@ -376,7 +378,9 @@ def setfit(cfg, project_root, test_data, output_dir, num_iterations, num_epochs,
     if predict_only:
         model, le, major_to_broad, metadata = setfit_load(cfg, project_root)
     else:
-        model, le, major_to_broad, metadata = setfit_train(cfg, project_root, **kwargs)
+        model, le, major_to_broad, metadata = setfit_train(
+            cfg, project_root, train_path=train_data, **kwargs
+        )
 
     # Synthetic test
     synth_test_path = cfg.resolve_path(cfg.train.test_data, project_root)
@@ -424,6 +428,8 @@ def setfit(cfg, project_root, test_data, output_dir, num_iterations, num_epochs,
 
 @cli.command()
 @_config_options
+@click.option("--train-data", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Training data path (JSONL). Defaults to config train_data.")
 @click.option("--test-data", type=click.Path(exists=True, path_type=Path), default=None,
               help="Test data path (JSONL or Excel). Defaults to synthetic test set.")
 @click.option("--output-dir", type=click.Path(path_type=Path), default=None,
@@ -433,7 +439,7 @@ def setfit(cfg, project_root, test_data, output_dir, num_iterations, num_epochs,
 @click.option("--epochs", type=int, default=3, help="Training epochs.")
 @click.option("--lr", type=float, default=2e-5, help="Learning rate.")
 @click.option("--batch-size", type=int, default=16, help="Per-device batch size.")
-def finetune(cfg, project_root, test_data, output_dir, model_name, epochs, lr, batch_size) -> None:
+def finetune(cfg, project_root, train_data, test_data, output_dir, model_name, epochs, lr, batch_size) -> None:
     """Run full encoder fine-tune classifier (B5)."""
     from .baselines.finetune import finetune_classify
     from .evaluation.metrics import compute_metrics, print_metrics
@@ -445,6 +451,8 @@ def finetune(cfg, project_root, test_data, output_dir, model_name, epochs, lr, b
     kwargs = {"epochs": epochs, "lr": lr, "batch_size": batch_size}
     if model_name is not None:
         kwargs["model_name_or_path"] = model_name
+    if train_data is not None:
+        kwargs["train_path"] = train_data
 
     # Synthetic test
     pred_set = finetune_classify(cfg, project_root, dataset_name="synthetic_test", **kwargs)
