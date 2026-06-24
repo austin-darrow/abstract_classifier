@@ -94,11 +94,13 @@ def setfit_train(
     # Create SetFit model
     model = SetFitModel.from_pretrained(encoder_name)
 
-    # Cast to bf16 to halve GPU memory usage
+    # Reduce GPU memory: shorter sequences + gradient checkpointing
     if use_bf16:
-        import torch
-        model.model_body = model.model_body.to(torch.bfloat16)
-        print("Using bf16 mixed precision")
+        # Reduce max_seq_length (512 → 256; abstracts rarely exceed 256 tokens)
+        model.model_body.max_seq_length = 256
+        # Enable gradient checkpointing to trade compute for memory
+        model.model_body[0].auto_model.gradient_checkpointing_enable()
+        print(f"Memory optimization: max_seq_length=256, gradient_checkpointing=True")
 
     # Training arguments
     args = TrainingArguments(
