@@ -22,6 +22,7 @@ def setfit_train(
     num_epochs: int | None = None,
     batch_size: int = 16,
     max_samples_per_class: int | None = None,
+    use_bf16: bool = False,
 ) -> tuple:
     """Train a SetFit model. Returns (model, label_encoder, major_to_broad, metadata).
 
@@ -33,6 +34,7 @@ def setfit_train(
         num_epochs: Number of fine-tuning epochs.
         batch_size: Training batch size for contrastive pairs.
         max_samples_per_class: Cap samples per class (None = all data).
+        use_bf16: Enable bfloat16 mixed precision (requires Ampere+ GPU).
 
     Returns:
         Tuple of (trained_model, label_encoder, major_to_broad, metadata_dict).
@@ -93,11 +95,15 @@ def setfit_train(
     model = SetFitModel.from_pretrained(encoder_name)
 
     # Training arguments
-    args = TrainingArguments(
+    train_kwargs = dict(
         batch_size=batch_size,
         num_iterations=num_iterations,
         num_epochs=num_epochs,
     )
+    if use_bf16:
+        train_kwargs["bf16"] = True
+        print("Using bf16 mixed precision")
+    args = TrainingArguments(**train_kwargs)
 
     trainer = Trainer(
         model=model,

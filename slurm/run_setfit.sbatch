@@ -4,7 +4,7 @@
 #SBATCH -p gh                     # Grace-Hopper GPU partition
 #SBATCH -N 1                      # 1 node
 #SBATCH -n 1                      # 1 task
-#SBATCH -t 08:00:00               # 4 hours (SetFit contrastive is slow with 74 classes)
+#SBATCH -t 12:00:00               # 4 hours (SetFit contrastive is slow with 74 classes)
 #SBATCH --mail-type=end,fail
 #
 # B4: SetFit contrastive fine-tuning classifier
@@ -29,7 +29,7 @@ echo ""
 cip-classifier setfit \
     -c configs/default.yaml -c configs/vista.yaml -c configs/train.yaml \
     --train-data data/generated/train_with_silver.jsonl \
-    --batch-size 64
+    --batch-size 32 --bf16 --num-iterations 20
 
 echo ""
 echo "B4 SetFit completed: $(date)"

@@ -360,8 +360,9 @@ def embedding_head(cfg, project_root, test_data, output_dir, hidden_dim, epochs,
 @click.option("--batch-size", type=int, default=None, help="Contrastive pair batch size (default 16).")
 @click.option("--max-samples-per-class", type=int, default=None,
               help="Cap training samples per class (speeds up training).")
+@click.option("--bf16", is_flag=True, help="Enable bf16 mixed precision (halves GPU memory).")
 @click.option("--predict-only", is_flag=True, help="Load saved model, skip training.")
-def setfit(cfg, project_root, train_data, test_data, output_dir, num_iterations, num_epochs, batch_size, max_samples_per_class, predict_only) -> None:
+def setfit(cfg, project_root, train_data, test_data, output_dir, num_iterations, num_epochs, batch_size, max_samples_per_class, bf16, predict_only) -> None:
     """Run SetFit contrastive fine-tuning classifier (B4)."""
     from .baselines.setfit_classify import setfit_train, setfit_predict, setfit_load
     from .baselines.faiss_retrieval import _load_test_data
@@ -380,6 +381,8 @@ def setfit(cfg, project_root, train_data, test_data, output_dir, num_iterations,
         kwargs["batch_size"] = batch_size
     if max_samples_per_class is not None:
         kwargs["max_samples_per_class"] = max_samples_per_class
+    if bf16:
+        kwargs["use_bf16"] = True
 
     # Train or load
     if predict_only:
