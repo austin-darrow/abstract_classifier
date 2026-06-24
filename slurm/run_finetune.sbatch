@@ -25,7 +25,10 @@ echo "GPU:  $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || e
 echo "Date: $(date)"
 echo ""
 
-cip-classifier finetune -c configs/default.yaml -c configs/vista.yaml
+cip-classifier finetune \
+    -c configs/default.yaml -c configs/vista.yaml -c configs/train.yaml \
+    --train-data data/generated/train_with_silver.jsonl \
+    --epochs 5
 
 echo ""
 echo "B5 Fine-tune completed: $(date)"

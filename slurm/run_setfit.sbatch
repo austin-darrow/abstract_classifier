@@ -26,7 +26,9 @@ echo "GPU:  $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || e
 echo "Date: $(date)"
 echo ""
 
-cip-classifier setfit -c configs/default.yaml -c configs/vista.yaml
+cip-classifier setfit \
+    -c configs/default.yaml -c configs/vista.yaml -c configs/train.yaml \
+    --train-data data/generated/train_with_silver.jsonl
 
 echo ""
 echo "B4 SetFit completed: $(date)"
