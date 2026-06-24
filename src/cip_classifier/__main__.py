@@ -117,7 +117,8 @@ def baseline_eval(cfg, project_root, test_data, output_dir) -> None:
     real_path = test_data or cfg.resolve_path(cfg.paths.abstracts_excel, project_root)
     if real_path.exists():
         pred_set_real = baseline_classify(cfg, project_root, test_path=real_path, dataset_name="real_tacc")
-        labeled = [p for p in pred_set_real.predictions if p.true_major_field]
+        labeled = [p for p in pred_set_real.predictions
+                   if p.true_major_field and p.true_major_field != "UNASSIGNED"]
         pred_set_labeled = PredictionSet(
             model_name=pred_set_real.model_name,
             predictions=labeled,
@@ -221,7 +222,8 @@ def knn(cfg, project_root, top_k, test_data, output_dir) -> None:
             top_k=top_k, dataset_name="real_tacc",
         )
         # Filter to only records with valid labels for metrics
-        labeled = [p for p in pred_set_real.predictions if p.true_major_field]
+        labeled = [p for p in pred_set_real.predictions
+                   if p.true_major_field and p.true_major_field != "UNASSIGNED"]
         from .evaluation.predictions import PredictionSet
         pred_set_labeled = PredictionSet(
             model_name=pred_set_real.model_name,
@@ -268,7 +270,8 @@ def tfidf(cfg, project_root, test_data, output_dir) -> None:
         pred_set_real = tfidf_classify(
             cfg, project_root, test_path=real_path, dataset_name="real_tacc",
         )
-        labeled = [p for p in pred_set_real.predictions if p.true_major_field]
+        labeled = [p for p in pred_set_real.predictions
+                   if p.true_major_field and p.true_major_field != "UNASSIGNED"]
         pred_set_labeled = PredictionSet(
             model_name=pred_set_real.model_name,
             predictions=labeled,
@@ -325,7 +328,8 @@ def embedding_head(cfg, project_root, test_data, output_dir, hidden_dim, epochs,
         pred_set_real = embedding_head_classify(
             cfg, project_root, test_path=real_path, dataset_name="real_tacc", **kwargs,
         )
-        labeled = [p for p in pred_set_real.predictions if p.true_major_field]
+        labeled = [p for p in pred_set_real.predictions
+                   if p.true_major_field and p.true_major_field != "UNASSIGNED"]
         pred_set_labeled = PredictionSet(
             model_name=pred_set_real.model_name,
             predictions=labeled,
@@ -408,7 +412,8 @@ def setfit(cfg, project_root, train_data, test_data, output_dir, num_iterations,
             dataset_name="real_tacc", metadata=metadata,
             num_iterations=n_iter, num_epochs=n_ep,
         )
-        labeled = [p for p in pred_set_real.predictions if p.true_major_field]
+        labeled = [p for p in pred_set_real.predictions
+                   if p.true_major_field and p.true_major_field != "UNASSIGNED"]
         pred_set_labeled = PredictionSet(
             model_name=pred_set_real.model_name,
             predictions=labeled,
@@ -467,7 +472,8 @@ def finetune(cfg, project_root, train_data, test_data, output_dir, model_name, e
         pred_set_real = finetune_classify(
             cfg, project_root, test_path=real_path, dataset_name="real_tacc", **kwargs,
         )
-        labeled = [p for p in pred_set_real.predictions if p.true_major_field]
+        labeled = [p for p in pred_set_real.predictions
+                   if p.true_major_field and p.true_major_field != "UNASSIGNED"]
         pred_set_labeled = PredictionSet(
             model_name=pred_set_real.model_name,
             predictions=labeled,
@@ -534,7 +540,8 @@ def zeroshot(cfg, project_root, test_data, output_dir, model_name, server_url, m
             pred_set_real = zeroshot_llm_classify(
                 cfg, project_root, test_path=real_path, dataset_name="real_tacc", **kwargs,
             )
-            labeled = [p for p in pred_set_real.predictions if p.true_major_field]
+            labeled = [p for p in pred_set_real.predictions
+                   if p.true_major_field and p.true_major_field != "UNASSIGNED"]
             pred_set_labeled = PredictionSet(
                 model_name=pred_set_real.model_name,
                 predictions=labeled,
