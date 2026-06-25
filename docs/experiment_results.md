@@ -14,7 +14,7 @@
 | B5 | SciBERT fine-tune (synth only) | 0.9077 | 0.9171 | 0.8428 | 0.3228 | 0.5295 | 0.1775 |
 | B6 | Zero-shot LLM (ceiling) | 0.1570 | 0.2240 | 0.3062 | 0.3130 | 0.5750 | 0.2534 |
 | **C3** | **SciBERT + silver labels (5ep)** | **0.9280** | **0.9351** | **0.9049** | 0.3323* | 0.5471* | 0.1911* |
-| C3 | SetFit bge-large + silver | — | — | — | — | — | pending |
+| C3 | SetFit bge-large + silver | 0.9055 | 0.9213 | 0.7802 | 0.3199* | 0.5280* | 0.1840* |
 
 *Real TACC metrics measured against DB labels which have ~55% noise. On trusted labels (n=3,371): **96.7% major, 97.9% broad.**
 
@@ -294,19 +294,38 @@ bge-large + silver labels run: **pending** (sbatch submitted).
 
 #### B4 SetFit bge-large + Silver Labels
 
-**Pending** — sbatch submitted, ~4 hr expected.
+- **Date:** 2026-06-25
+- **Model:** `BAAI/bge-large-en-v1.5` (335M params)
+- **Training data:** 21,510 (synthetic + silver)
+- **Hyperparams:** num_iterations=20, num_epochs=1, batch_size=32, gradient_checkpointing=True
+- **Runtime:** ~8 hours on GH200
+
+| Dataset | Major Acc | Broad Acc | Macro F1 | Top-3 Acc | Top-5 Acc |
+|---------|-----------|-----------|----------|-----------|----------|
+| Synthetic test (n=4,054) | 0.9055 | 0.9213 | 0.7802 | 0.9758 | 0.9909 |
+| Real TACC (n=15,790) | 0.3199 | 0.5280 | 0.1840 | 0.4440 | 0.5077 |
+
+**Conclusion:** Underperforms SciBERT on all metrics. Synthetic major 90.6% vs 92.8%, macro F1 0.78 vs 0.90. Multiple zero-F1 fields (Materials Sciences, Computer Science). bge-large contrastive training is harder to optimize with SetFit's pair-based approach at this scale.
+
+**Note:** Old B4 (bge-base) predictions were overwritten by this run, so eval_clean cannot be computed for this model (no independent references available).
+
+---
+
+### C3 Conclusion
+
+**Winner: SciBERT + silver labels (5 epochs).** Decisively outperforms SetFit bge-large on ground-truth synthetic labels (92.8% vs 90.6% major, 0.905 vs 0.780 macro F1) and achieves 96.7% on trusted real labels. Going forward, SciBERT fine-tuning is the primary strategy.
 
 ---
 
 ### C4. Hyperparameter Tuning
 
-Not yet started. Depends on C3 results.
+Not yet started. Will focus on SciBERT: lr sweep, label_smoothing, longer training, DeBERTa comparison.
 
 ---
 
 ### C5. Hierarchical Classification
 
-Not yet started. Depends on C3/C4.
+Not yet started. Will use SciBERT as base model.
 
 ---
 
