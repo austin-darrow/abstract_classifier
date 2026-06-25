@@ -94,13 +94,10 @@ def setfit_train(
     # Create SetFit model
     model = SetFitModel.from_pretrained(encoder_name)
 
-    # Reduce GPU memory: shorter sequences + gradient checkpointing
+    # Reduce GPU memory: gradient checkpointing trades compute for memory
     if use_bf16:
-        # Reduce max_seq_length (512 → 256; abstracts rarely exceed 256 tokens)
-        model.model_body.max_seq_length = 256
-        # Enable gradient checkpointing to trade compute for memory
         model.model_body[0].auto_model.gradient_checkpointing_enable()
-        print(f"Memory optimization: max_seq_length=256, gradient_checkpointing=True")
+        print("Memory optimization: gradient_checkpointing=True")
 
     # Training arguments
     args = TrainingArguments(

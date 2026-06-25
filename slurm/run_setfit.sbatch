@@ -4,7 +4,7 @@
 #SBATCH -p gh                     # Grace-Hopper GPU partition
 #SBATCH -N 1                      # 1 node
 #SBATCH -n 1                      # 1 task
-#SBATCH -t 12:00:00               # 4 hours (SetFit contrastive is slow with 74 classes)
+#SBATCH -t 24:00:00               # 24 hours (bge-large contrastive is slow)
 #SBATCH --mail-type=end,fail
 #
 # B4: SetFit contrastive fine-tuning classifier
