@@ -190,7 +190,7 @@ def generate_charts(results: list[dict], output_dir: Path):
         fig, ax = plt.subplots(figsize=(10, 5))
         labels = list(by_model.keys())
         data = [by_model[m] for m in labels]
-        ax.boxplot(data, labels=labels, vert=True)
+        ax.boxplot(data, tick_labels=labels, vert=True)
         ax.set_ylabel("Major Accuracy")
         ax.set_title("Model Comparison (all configs)")
         ax.grid(True, alpha=0.3)

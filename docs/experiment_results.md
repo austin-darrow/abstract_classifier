@@ -15,6 +15,7 @@
 | B6 | Zero-shot LLM (ceiling) | 0.1570 | 0.2240 | 0.3062 | 0.3130 | 0.5750 | 0.2534 |
 | **C3** | **SciBERT + silver labels (5ep)** | **0.9280** | **0.9351** | **0.9049** | 0.3323* | 0.5471* | 0.1911* |
 | C3 | SetFit bge-large + silver | 0.9055 | 0.9213 | 0.7802 | 0.3199* | 0.5280* | 0.1840* |
+| **C4** | **SciBERT lr=3e-5, 8ep + silver** | **0.9396** | **0.9447** | **0.9369** | pending | pending | pending |
 
 *Real TACC metrics measured against DB labels which have ~55% noise. On trusted labels (n=3,371): **96.7% major, 97.9% broad.**
 
@@ -317,9 +318,42 @@ bge-large + silver labels run: **pending** (sbatch submitted).
 
 ---
 
-### C4. Hyperparameter Tuning
+### C4. Hyperparameter Tuning ✅
 
-Not yet started. Will focus on SciBERT: lr sweep, label_smoothing, longer training, DeBERTa comparison.
+- **Date:** 2026-06-25
+- **Method:** Exhaustive sweep of 47 configurations across 4 models, 4 LRs, 4 epoch counts, regularization, schedulers, layer freezing, and batch sizes.
+- **Script:** `scripts/sweep_finetune.py`, `scripts/analyze_sweep.py`
+- **Runtime:** ~3.5 hours total on GH200
+
+#### Top 5 Configurations
+
+| Rank | Config | Major Acc | Broad Acc | Macro F1 | Time |
+|------|--------|-----------|-----------|----------|------|
+| 1 | **SciBERT lr=3e-5, 8ep** | **0.9396** | **0.9447** | **0.9369** | 315s |
+| 2 | SciBERT lr=3e-5, 5ep, cosine, ls=0.05, wd=0.05 | 0.9386 | 0.9423 | 0.9280 | 254s |
+| 3 | DeBERTa-v3-large lr=1e-5, 8ep | 0.9378 | 0.9418 | 0.9349 | 2689s |
+| 4 | SciBERT lr=3e-5, 5ep | 0.9371 | 0.9423 | 0.9311 | 247s |
+| 5 | SciBERT lr=3e-5, 8ep, cosine | 0.9364 | 0.9406 | 0.9291 | 390s |
+
+#### Key Findings
+
+- **Optimal LR:** 3e-5 (mean=0.930 vs 2e-5 mean=0.925)
+- **Optimal epochs:** 8 (mean=0.930, 10 overfits at 0.917)
+- **Label smoothing:** 0.05-0.10 helps on average (0.931 vs 0.923) but didn't beat clean top config
+- **DeBERTa-v3-large:** Competitive (93.78%) but 10× slower — not worth it
+- **DeBERTa-v3-base:** Underperformed (91.74%) — surprising
+- **BiomedBERT:** Solid (93.27%) but SciBERT still wins on scientific abstracts
+- **Cosine scheduler:** Helps slightly (rank 2, 5)
+
+#### Improvement Over C3 Baseline
+
+| Metric | C3 (lr=2e-5, 5ep) | C4 Best (lr=3e-5, 8ep) | Delta |
+|--------|-------------------|------------------------|-------|
+| Major Acc | 0.9280 | **0.9396** | **+1.2%** |
+| Broad Acc | 0.9351 | **0.9447** | **+1.0%** |
+| Macro F1 | 0.9049 | **0.9369** | **+3.2%** |
+
+Best model saved to: `output/sweep/models/scibert_scivocab_uncased_lr3e-05_ep8_bs16_ls0.0_wd0.01_linear/`
 
 ---
 

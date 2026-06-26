@@ -447,49 +447,82 @@ def setfit(cfg, project_root, train_data, test_data, output_dir, num_iterations,
               help="Directory to save predictions.")
 @click.option("--model-name", type=str, default=None,
               help="HF model to fine-tune (default: allenai/scibert_scivocab_uncased).")
+@click.option("--model-path", type=click.Path(exists=True, path_type=Path), default=None,
+              help="Load a pre-trained model from this directory (skip training).")
 @click.option("--epochs", type=int, default=3, help="Training epochs.")
 @click.option("--lr", type=float, default=2e-5, help="Learning rate.")
 @click.option("--batch-size", type=int, default=16, help="Per-device batch size.")
-def finetune(cfg, project_root, train_data, test_data, output_dir, model_name, epochs, lr, batch_size) -> None:
+@click.option("--seed", type=int, default=42, help="Random seed for reproducibility.")
+def finetune(cfg, project_root, train_data, test_data, output_dir, model_name, model_path, epochs, lr, batch_size, seed) -> None:
     """Run full encoder fine-tune classifier (B5)."""
-    from .baselines.finetune import finetune_classify
+    from .baselines.finetune import finetune_classify, finetune_predict
     from .evaluation.metrics import compute_metrics, print_metrics
     from .evaluation.predictions import PredictionSet
 
     if output_dir is None:
         output_dir = project_root / "output" / "predictions"
 
-    kwargs = {"epochs": epochs, "lr": lr, "batch_size": batch_size}
-    if model_name is not None:
-        kwargs["model_name_or_path"] = model_name
-    if train_data is not None:
-        kwargs["train_path"] = train_data
-
-    # Synthetic test
-    pred_set = finetune_classify(cfg, project_root, dataset_name="synthetic_test", **kwargs)
-    metrics = compute_metrics(pred_set)
-    print_metrics(metrics)
-    pred_set.save(output_dir / f"predictions_{pred_set.model_name}_synthetic_test.json")
-    metrics.save(output_dir / f"metrics_{pred_set.model_name}_synthetic_test.json")
-
-    # Real TACC
-    real_path = test_data or cfg.resolve_path(cfg.paths.abstracts_excel, project_root)
-    if real_path.exists():
-        pred_set_real = finetune_classify(
-            cfg, project_root, test_path=real_path, dataset_name="real_tacc", **kwargs,
+    if model_path is not None:
+        # Predict-only mode: load saved model, predict on test sets
+        pred_set = finetune_predict(
+            cfg, project_root, model_path, dataset_name="synthetic_test",
         )
-        labeled = [p for p in pred_set_real.predictions
-                   if p.true_major_field and p.true_major_field != "UNASSIGNED"]
-        pred_set_labeled = PredictionSet(
-            model_name=pred_set_real.model_name,
-            predictions=labeled,
-            dataset="real_tacc",
-            metadata=pred_set_real.metadata,
-        )
-        metrics_real = compute_metrics(pred_set_labeled)
-        print_metrics(metrics_real)
-        pred_set_real.save(output_dir / f"predictions_{pred_set_real.model_name}_real_tacc.json")
-        metrics_real.save(output_dir / f"metrics_{pred_set_real.model_name}_real_tacc.json")
+        metrics = compute_metrics(pred_set)
+        print_metrics(metrics)
+        pred_set.save(output_dir / f"predictions_{pred_set.model_name}_synthetic_test.json")
+        metrics.save(output_dir / f"metrics_{pred_set.model_name}_synthetic_test.json")
+
+        # Real TACC
+        real_path = test_data or cfg.resolve_path(cfg.paths.abstracts_excel, project_root)
+        if real_path.exists():
+            pred_set_real = finetune_predict(
+                cfg, project_root, model_path, test_path=real_path, dataset_name="real_tacc",
+            )
+            labeled = [p for p in pred_set_real.predictions
+                       if p.true_major_field and p.true_major_field != "UNASSIGNED"]
+            pred_set_labeled = PredictionSet(
+                model_name=pred_set_real.model_name,
+                predictions=labeled,
+                dataset="real_tacc",
+                metadata=pred_set_real.metadata,
+            )
+            metrics_real = compute_metrics(pred_set_labeled)
+            print_metrics(metrics_real)
+            pred_set_real.save(output_dir / f"predictions_{pred_set_real.model_name}_real_tacc.json")
+            metrics_real.save(output_dir / f"metrics_{pred_set_real.model_name}_real_tacc.json")
+    else:
+        # Train + predict mode
+        kwargs = {"epochs": epochs, "lr": lr, "batch_size": batch_size, "seed": seed}
+        if model_name is not None:
+            kwargs["model_name_or_path"] = model_name
+        if train_data is not None:
+            kwargs["train_path"] = train_data
+
+        # Synthetic test
+        pred_set = finetune_classify(cfg, project_root, dataset_name="synthetic_test", **kwargs)
+        metrics = compute_metrics(pred_set)
+        print_metrics(metrics)
+        pred_set.save(output_dir / f"predictions_{pred_set.model_name}_synthetic_test.json")
+        metrics.save(output_dir / f"metrics_{pred_set.model_name}_synthetic_test.json")
+
+        # Real TACC
+        real_path = test_data or cfg.resolve_path(cfg.paths.abstracts_excel, project_root)
+        if real_path.exists():
+            pred_set_real = finetune_classify(
+                cfg, project_root, test_path=real_path, dataset_name="real_tacc", **kwargs,
+            )
+            labeled = [p for p in pred_set_real.predictions
+                       if p.true_major_field and p.true_major_field != "UNASSIGNED"]
+            pred_set_labeled = PredictionSet(
+                model_name=pred_set_real.model_name,
+                predictions=labeled,
+                dataset="real_tacc",
+                metadata=pred_set_real.metadata,
+            )
+            metrics_real = compute_metrics(pred_set_labeled)
+            print_metrics(metrics_real)
+            pred_set_real.save(output_dir / f"predictions_{pred_set_real.model_name}_real_tacc.json")
+            metrics_real.save(output_dir / f"metrics_{pred_set_real.model_name}_real_tacc.json")
 
 
 # ---------------------------------------------------------------------------
