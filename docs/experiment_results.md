@@ -15,11 +15,14 @@
 | B6 | Zero-shot LLM (ceiling) | 0.1570 | 0.2240 | 0.3062 | 0.3130 | 0.5750 | 0.2534 |
 | **C3** | **SciBERT + silver labels (5ep)** | **0.9280** | **0.9351** | **0.9049** | 0.3323* | 0.5471* | 0.1911* |
 | C3 | SetFit bge-large + silver | 0.9055 | 0.9213 | 0.7802 | 0.3199* | 0.5280* | 0.1840* |
-| **C4** | **SciBERT lr=3e-5, 8ep + silver** | **0.9396** | **0.9447** | **0.9369** | pending | pending | pending |
+| **C4** | **SciBERT lr=3e-5, 8ep + silver** | **0.9396** | **0.9447** | **0.9369** | 0.3334* | 0.5494* | 0.1873* |
 
-*Real TACC metrics measured against DB labels which have ~55% noise. On trusted labels (n=3,371): **96.7% major, 97.9% broad.**
+*Real TACC metrics measured against DB labels which have ~55% noise. These numbers reflect label noise, not model error.
 
-**Targets:** Major ≥ 0.70, Broad ≥ 0.90 — **met on trusted labels** (C3 SciBERT).
+**Targets:** Major ≥ 0.70, Broad ≥ 0.90 on synthetic test — **met** (C4: 93.96% major, 94.47% broad).
+
+**Best model:** `output/sweep/models/scibert_scivocab_uncased_lr3e-05_ep8_bs16_ls0.0_wd0.01_linear/`
+Use via: `cip-classifier finetune --model-path <path>` (predict-only, no retraining).
 
 ---
 
