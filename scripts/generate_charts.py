@@ -2,11 +2,12 @@
 
 Charts produced:
   1. Learning curve: loss and accuracy per epoch (best model)
-  2. Confusion matrix (top-20 fields, synthetic test)
-  3. Per-field F1 bar chart (synthetic test)
-  4. Confidence distribution histogram
-  5. Sweep leaderboard (from sweep results)
-  6. LR × epochs heatmap (from sweep results)
+  2. Data scaling curve: accuracy vs training set size
+  3. Confusion matrix (top-20 fields, synthetic test)
+  4. Per-field F1 bar chart (synthetic test)
+  5. Confidence distribution histogram
+  6. Sweep leaderboard (from sweep results)
+  7. LR × epochs heatmap (from sweep results)
 
 Usage:
     # Full charts (GPU required for learning curve — retrains best config):
@@ -141,8 +142,8 @@ def generate_learning_curve(project_root: Path, output_dir: Path):
             val_losses.append(entry["eval_loss"])
             val_accs.append(entry["eval_accuracy"])
             epochs.append(entry["epoch"])
-        if "train_loss" in entry and "epoch" in entry:
-            train_losses.append(entry["train_loss"])
+        if "loss" in entry and "eval_loss" not in entry and "epoch" in entry:
+            train_losses.append(entry["loss"])
 
     # Align lengths
     n = min(len(epochs), len(train_losses), len(val_losses))
@@ -191,7 +192,163 @@ def generate_learning_curve(project_root: Path, output_dir: Path):
 
 
 # =========================================================================
-# Chart 2: Confusion matrix (top-N most confused fields)
+# Chart 2: Data scaling curve (accuracy vs number of training samples)
+# =========================================================================
+def generate_data_scaling_curve(project_root: Path, output_dir: Path):
+    """Train on increasing fractions of data to verify we have enough."""
+    import torch
+    from datasets import Dataset
+    from sklearn.model_selection import train_test_split
+    from sklearn.preprocessing import LabelEncoder
+    from transformers import (
+        AutoModelForSequenceClassification,
+        AutoTokenizer,
+        Trainer,
+        TrainingArguments,
+    )
+
+    print("Training with increasing data fractions...")
+
+    # Load data
+    train_path = project_root / "data" / "generated" / "train_with_silver.jsonl"
+    train_records = []
+    with open(train_path) as f:
+        for line in f:
+            train_records.append(json.loads(line))
+
+    all_texts = [r["abstract"] for r in train_records]
+    all_labels = [r["major_field"] for r in train_records]
+
+    le = LabelEncoder()
+    le.fit(all_labels)
+    all_y = le.transform(all_labels).tolist()
+    n_classes = len(le.classes_)
+
+    # Hold out fixed 10% validation set
+    idx_train, idx_val = train_test_split(
+        list(range(len(all_texts))), test_size=0.1, random_state=42, stratify=all_y,
+    )
+    val_texts = [all_texts[i] for i in idx_val]
+    val_labels = [all_y[i] for i in idx_val]
+
+    model_name = "allenai/scibert_scivocab_uncased"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    def tokenize_fn(examples):
+        return tokenizer(examples["text"], truncation=True, max_length=512, padding="max_length")
+
+    val_ds = Dataset.from_dict({"text": val_texts, "label": val_labels}).map(tokenize_fn, batched=True)
+    val_ds.set_format("torch", columns=["input_ids", "attention_mask", "label"])
+
+    fractions = [0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    results = {"fractions": [], "n_samples": [], "val_accuracy": [], "val_loss": []}
+
+    for frac in fractions:
+        n = int(len(idx_train) * frac)
+        subset_idx = idx_train[:n]
+        tr_texts = [all_texts[i] for i in subset_idx]
+        tr_labels = [all_y[i] for i in subset_idx]
+
+        train_ds = Dataset.from_dict({"text": tr_texts, "label": tr_labels}).map(tokenize_fn, batched=True)
+        train_ds.set_format("torch", columns=["input_ids", "attention_mask", "label"])
+
+        model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=n_classes)
+
+        ckpt_dir = project_root / "output" / "models" / "scaling_curve" / f"frac_{frac}"
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+
+        training_args = TrainingArguments(
+            output_dir=str(ckpt_dir),
+            num_train_epochs=5,
+            per_device_train_batch_size=16,
+            per_device_eval_batch_size=32,
+            learning_rate=3e-5,
+            warmup_ratio=0.1,
+            weight_decay=0.01,
+            eval_strategy="epoch",
+            save_strategy="no",
+            logging_strategy="epoch",
+            load_best_model_at_end=False,
+            fp16=torch.cuda.is_available(),
+            dataloader_num_workers=4,
+            seed=42,
+            report_to="none",
+        )
+
+        def compute_metrics(eval_pred):
+            logits, labels = eval_pred
+            preds = np.argmax(logits, axis=-1)
+            return {"accuracy": float((preds == labels).mean())}
+
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            train_dataset=train_ds,
+            eval_dataset=val_ds,
+            compute_metrics=compute_metrics,
+        )
+
+        trainer.train()
+
+        # Get best val accuracy across epochs
+        best_acc = max(
+            entry["eval_accuracy"]
+            for entry in trainer.state.log_history
+            if "eval_accuracy" in entry
+        )
+        final_loss = min(
+            entry["eval_loss"]
+            for entry in trainer.state.log_history
+            if "eval_loss" in entry
+        )
+
+        results["fractions"].append(frac)
+        results["n_samples"].append(n)
+        results["val_accuracy"].append(best_acc)
+        results["val_loss"].append(final_loss)
+        print(f"  {frac*100:5.1f}% ({n:6d} samples): acc={best_acc:.4f}, loss={final_loss:.4f}")
+
+        del model, trainer
+        torch.cuda.empty_cache()
+
+    # Save raw data
+    with open(output_dir / "data_scaling_data.json", "w") as f:
+        json.dump(results, f, indent=2)
+
+    # Plot
+    _plot_data_scaling(results, output_dir)
+
+
+def _plot_data_scaling(results: dict, output_dir: Path):
+    """Plot the data scaling curve from saved results."""
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+    ax1.plot(results["n_samples"], results["val_accuracy"], "D-", color="#4CAF50", markersize=8)
+    ax1.set_xlabel("Training Samples")
+    ax1.set_ylabel("Best Val Accuracy")
+    ax1.set_title("Accuracy vs Training Set Size")
+    ax1.grid(True, alpha=0.3)
+    ax1.set_ylim(max(0.6, min(results["val_accuracy"]) - 0.05), 1.0)
+    # Annotate each point
+    for n, acc in zip(results["n_samples"], results["val_accuracy"]):
+        ax1.annotate(f"{acc:.3f}", (n, acc), textcoords="offset points",
+                     xytext=(0, 10), ha="center", fontsize=8)
+
+    ax2.plot(results["n_samples"], results["val_loss"], "s-", color="#F44336", markersize=8)
+    ax2.set_xlabel("Training Samples")
+    ax2.set_ylabel("Best Val Loss")
+    ax2.set_title("Loss vs Training Set Size")
+    ax2.grid(True, alpha=0.3)
+
+    fig.suptitle("Data Scaling: SciBERT (5 epochs, lr=3e-5)", fontsize=13)
+    plt.tight_layout()
+    plt.savefig(output_dir / "data_scaling_curve.png", dpi=150)
+    plt.close()
+    print(f"  Saved: {output_dir / 'data_scaling_curve.png'}")
+
+
+# =========================================================================
+# Chart 3: Confusion matrix (top-N most confused fields)
 # =========================================================================
 def generate_confusion_matrix(predictions: list[dict], output_dir: Path, top_n: int = 20):
     """Plot confusion matrix for the top-N most common fields."""
@@ -467,6 +624,11 @@ def main():
         print("Chart 1: Learning Curve")
         print("=" * 50)
         generate_learning_curve(project_root, output_dir)
+
+        print("\n" + "=" * 50)
+        print("Chart 2: Data Scaling Curve")
+        print("=" * 50)
+        generate_data_scaling_curve(project_root, output_dir)
     else:
         # Check if learning curve data already exists
         lc_data = output_dir / "learning_curve_data.json"
@@ -500,7 +662,17 @@ def main():
         else:
             print("Skipping learning curve (use without --no-retrain on GPU node)")
 
-    # Charts 2-4: From predictions
+        # Check for saved data scaling data
+        ds_data = output_dir / "data_scaling_data.json"
+        if ds_data.exists():
+            print("\nData scaling data found, plotting from saved data...")
+            with open(ds_data) as f:
+                scaling = json.load(f)
+            _plot_data_scaling(scaling, output_dir)
+        else:
+            print("Skipping data scaling (use without --no-retrain on GPU node)")
+
+    # Charts 3-5: From predictions
     if pred_path and pred_path.exists():
         with open(pred_path) as f:
             data = json.load(f)
@@ -508,32 +680,32 @@ def main():
         print(f"\nUsing predictions from: {pred_path.name} ({len(predictions)} records)")
 
         print("\n" + "=" * 50)
-        print("Chart 2: Confusion Matrix")
+        print("Chart 3: Confusion Matrix")
         print("=" * 50)
         generate_confusion_matrix(predictions, output_dir)
 
         print("\n" + "=" * 50)
-        print("Chart 3: Per-Field F1")
+        print("Chart 4: Per-Field F1")
         print("=" * 50)
         generate_per_field_f1(predictions, output_dir)
 
         print("\n" + "=" * 50)
-        print("Chart 4: Confidence Distribution")
+        print("Chart 5: Confidence Distribution")
         print("=" * 50)
         generate_confidence_dist(predictions, output_dir)
     else:
         print("\nNo prediction file found, skipping confusion/F1/confidence charts")
         print("  Run with: --predictions output/predictions/predictions_*.json")
 
-    # Chart 5: Sweep results
+    # Chart 6: Sweep results
     print("\n" + "=" * 50)
-    print("Chart 5: Sweep Leaderboard + Heatmap")
+    print("Chart 6: Sweep Leaderboard + Heatmap")
     print("=" * 50)
     generate_sweep_charts(project_root, output_dir)
 
-    # Chart 6: Approach progression
+    # Chart 7: Approach progression
     print("\n" + "=" * 50)
-    print("Chart 6: Approach Progression")
+    print("Chart 7: Approach Progression")
     print("=" * 50)
     generate_progression_chart(output_dir)
 
