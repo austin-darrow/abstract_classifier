@@ -112,7 +112,8 @@ def main():
     parser = argparse.ArgumentParser(description="D2.2: Generate detailed silver labels from hierarchical model")
     parser.add_argument("--major-model", type=Path, default=None, help="Major-field model directory")
     parser.add_argument("--detailed-model", type=Path, default=None, help="Detailed-field model directory")
-    parser.add_argument("--threshold", type=float, default=0.80, help="Confidence threshold for silver labels (default: 0.80)")
+    parser.add_argument("--major-threshold", type=float, default=0.90, help="Min major-field confidence (default: 0.90)")
+    parser.add_argument("--detailed-threshold", type=float, default=0.50, help="Min detailed-field confidence within constrained set (default: 0.50)")
     parser.add_argument("--output", type=Path, default=None, help="Output JSONL path")
     parser.add_argument("--batch-size", type=int, default=64, help="Inference batch size")
     parser.add_argument("--top-k-major", type=int, default=5, help="Top-k major fields for Strategy C")
@@ -230,12 +231,15 @@ def main():
     )
 
     # Apply Strategy C (combined = major_prob × detailed_prob)
-    print(f"\nApplying Strategy C with threshold={args.threshold}...")
+    # Threshold on INDIVIDUAL confidences rather than the product
+    print(f"\nApplying Strategy C with major_threshold={args.major_threshold}, detailed_threshold={args.detailed_threshold}...")
     major_probs = softmax(major_logits)
     detailed_probs = softmax(detailed_logits)
 
     silver_labels = []
     confidence_all = []
+    major_conf_all = []
+    detailed_conf_all = []
     n_above_threshold = 0
 
     for i in range(len(texts)):
@@ -247,6 +251,7 @@ def main():
         best_major_name = None
         best_broad_name = None
         best_major_conf = 0.0
+        best_detailed_conf = 0.0
 
         for mi in top_major_idx:
             major_name = major_classes[mi]
@@ -263,13 +268,17 @@ def main():
                     best_major_name = major_name
                     best_broad_name = detailed_to_broad.get(detailed_classes[di], "")
                     best_major_conf = float(major_prob)
+                    best_detailed_conf = float(detailed_probs[i, di])
 
         if best_detailed_name is None:
             continue
 
         confidence_all.append(best_score)
+        major_conf_all.append(best_major_conf)
+        detailed_conf_all.append(best_detailed_conf)
 
-        if best_score >= args.threshold:
+        # Threshold on individual model confidences
+        if best_major_conf >= args.major_threshold and best_detailed_conf >= args.detailed_threshold:
             n_above_threshold += 1
             record = {
                 "abstract": texts[i],
@@ -279,6 +288,7 @@ def main():
                 "source": "detailed_silver",
                 "confidence": round(best_score, 6),
                 "major_confidence": round(best_major_conf, 6),
+                "detailed_confidence": round(best_detailed_conf, 6),
             }
             # Carry over DB labels if available
             if "true_major_field" in real_records[i]:
@@ -294,15 +304,29 @@ def main():
 
     # Stats
     conf_array = np.array(confidence_all)
+    major_conf_array = np.array(major_conf_all)
+    detailed_conf_array = np.array(detailed_conf_all)
     stats = {
         "total_abstracts": len(texts),
-        "threshold": args.threshold,
+        "major_threshold": args.major_threshold,
+        "detailed_threshold": args.detailed_threshold,
         "above_threshold": n_above_threshold,
         "yield_pct": round(n_above_threshold / len(texts) * 100, 1),
-        "confidence_mean": round(float(conf_array.mean()), 4),
-        "confidence_median": round(float(np.median(conf_array)), 4),
-        "confidence_p25": round(float(np.percentile(conf_array, 25)), 4),
-        "confidence_p75": round(float(np.percentile(conf_array, 75)), 4),
+        "combined_score": {
+            "mean": round(float(conf_array.mean()), 4),
+            "median": round(float(np.median(conf_array)), 4),
+            "p75": round(float(np.percentile(conf_array, 75)), 4),
+        },
+        "major_confidence": {
+            "mean": round(float(major_conf_array.mean()), 4),
+            "median": round(float(np.median(major_conf_array)), 4),
+            "pct_above_threshold": round(float((major_conf_array >= args.major_threshold).mean()) * 100, 1),
+        },
+        "detailed_confidence": {
+            "mean": round(float(detailed_conf_array.mean()), 4),
+            "median": round(float(np.median(detailed_conf_array)), 4),
+            "pct_above_threshold": round(float((detailed_conf_array >= args.detailed_threshold).mean()) * 100, 1),
+        },
         "major_field_distribution": dict(Counter(r["major_field"] for r in silver_labels).most_common()),
         "detailed_field_count": len(set(r["detailed_field"] for r in silver_labels)),
     }
@@ -312,8 +336,11 @@ def main():
 
     print(f"\n=== Detailed Silver Label Stats ===")
     print(f"Total abstracts: {stats['total_abstracts']}")
-    print(f"Above threshold ({args.threshold}): {stats['above_threshold']} ({stats['yield_pct']}%)")
-    print(f"Confidence: mean={stats['confidence_mean']}, median={stats['confidence_median']}")
+    print(f"Thresholds: major >= {args.major_threshold}, detailed >= {args.detailed_threshold}")
+    print(f"Above threshold: {stats['above_threshold']} ({stats['yield_pct']}%)")
+    print(f"Combined score: mean={stats['combined_score']['mean']}, median={stats['combined_score']['median']}, p75={stats['combined_score']['p75']}")
+    print(f"Major confidence: mean={stats['major_confidence']['mean']}, {stats['major_confidence']['pct_above_threshold']}% above {args.major_threshold}")
+    print(f"Detailed confidence: mean={stats['detailed_confidence']['mean']}, {stats['detailed_confidence']['pct_above_threshold']}% above {args.detailed_threshold}")
     print(f"Detailed fields covered: {stats['detailed_field_count']}")
     print(f"\nTop major fields:")
     for field, n in Counter(r["major_field"] for r in silver_labels).most_common(15):

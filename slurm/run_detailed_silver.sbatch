@@ -29,7 +29,8 @@ echo ""
 python scripts/generate_detailed_silver.py \
     --major-model "$MAJOR_MODEL" \
     --detailed-model output/models/detailed_finetune \
-    --threshold 0.80 \
+    --major-threshold 0.90 \
+    --detailed-threshold 0.50 \
     --batch-size 64
 
 echo ""
