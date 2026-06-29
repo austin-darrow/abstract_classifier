@@ -31,7 +31,16 @@ echo "GPU:  $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || e
 echo "Date: $(date)"
 echo ""
 
+# Best major-field model: freeze8, 93.96% accuracy
+MAJOR_MODEL="output/sweep/models/scibert_scivocab_uncased_lr3e-05_ep8_bs16_ls0.0_wd0.01_linear_freeze8"
+
+echo "Using major model: $MAJOR_MODEL"
+echo "Using detailed model: output/models/detailed_finetune/"
+echo ""
+
 python scripts/run_hierarchical_inference.py \
+    --major-model "$MAJOR_MODEL" \
+    --detailed-model output/models/detailed_finetune \
     --top-k-major 5 \
     --major-alpha 2.0 \
     --batch-size 64

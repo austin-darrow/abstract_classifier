@@ -351,12 +351,34 @@ def main():
     if args.major_model:
         major_model_dir = Path(args.major_model)
     else:
-        # Auto-find: sweep best model
-        candidates = [
-            project_root / "output" / "sweep" / "models" / "scibert_scivocab_uncased_lr3e-05_ep8_bs16_ls0.0_wd0.01_linear",
-            project_root / "output" / "models" / "finetune",
-        ]
-        major_model_dir = next((c for c in candidates if (c / "label_classes.json").exists()), None)
+        # Auto-find: scan sweep models for any with label_classes.json,
+        # prefer the one with most classes (should be 74 for major-field)
+        sweep_dir = project_root / "output" / "sweep" / "models"
+        finetune_dir = project_root / "output" / "models" / "finetune"
+        found = []
+        if sweep_dir.is_dir():
+            for d in sorted(sweep_dir.iterdir()):
+                lc = d / "label_classes.json"
+                if lc.exists():
+                    with open(lc) as f:
+                        n = len(json.load(f))
+                    found.append((d, n))
+        if finetune_dir.is_dir() and (finetune_dir / "label_classes.json").exists():
+            with open(finetune_dir / "label_classes.json") as f:
+                n = len(json.load(f))
+            found.append((finetune_dir, n))
+
+        # Pick the one with exactly 74 classes (major-field), or closest
+        major_candidates = [d for d, n in found if 60 <= n <= 80]
+        if major_candidates:
+            major_model_dir = major_candidates[0]
+            print(f"Auto-discovered major model: {major_model_dir.name}")
+        elif found:
+            major_model_dir = found[0][0]
+            print(f"Auto-discovered model (best guess): {major_model_dir.name}")
+        else:
+            major_model_dir = None
+
         if major_model_dir is None:
             print("ERROR: Could not find major-field model. Use --major-model to specify.")
             return
