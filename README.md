@@ -2,16 +2,17 @@
 
 Classify research abstracts against the [CIP taxonomy](https://nces.ed.gov/ipeds/cipcode/) for field-of-science reporting. Built for TACC HPC allocation request abstracts.
 
-## Project Stages
+Trains on LLM-generated synthetic abstracts + high-confidence pseudo-labels from real TACC data. Uses SciBERT fine-tuning with hierarchical constrained decoding for both major-field (74 classes) and detailed-field (315 classes) classification.
 
-| Stage | Command | Description |
-|-------|---------|-------------|
-| 0 | `cip-classifier baseline --step parse` | Parse CIP taxonomy from Excel → JSON |
-| 1 | `cip-classifier generate` | Generate synthetic training data via LLM |
-| 2 | `cip-classifier train` | Train classifier (embedding head or SetFit) |
-| 3 | `cip-classifier baseline` | Embedding retrieval baseline (FAISS) |
-| — | `cip-classifier evaluate` | Evaluate classification results |
-| — | `cip-classifier visualize` | UMAP/t-SNE embedding plots |
+## Current Results
+
+| Model | Detailed Acc | Major Acc | Macro F1 |
+|-------|-------------|-----------|----------|
+| Major-field SciBERT (C4 sweep best) | — | 93.96% | 0.937 |
+| Detailed-field SciBERT (flat) | 87.94% | 92.77% | 0.699 |
+| **Hierarchical (major × detailed)** | **88.75%** | **94.06%** | **0.713** |
+
+All metrics on synthetic test set (n=4,054). Real TACC DB labels have ~55% noise rate, making traditional accuracy metrics against them unreliable. See [docs/experiment_results.md](docs/experiment_results.md) for full results.
 
 ## Quick Start
 
@@ -19,22 +20,17 @@ Classify research abstracts against the [CIP taxonomy](https://nces.ed.gov/ipeds
 # Install in editable mode
 pip install -e .
 
-# Run full baseline pipeline (parse → index → classify → evaluate)
-cip-classifier baseline
+# Predict with the best major-field model
+cip-classifier finetune --model-path output/sweep/models/scibert_scivocab_uncased_lr3e-05_ep8_bs16_ls0.0_wd0.01_linear_freeze8/
 
-# Individual steps
-cip-classifier baseline --step build-index
-cip-classifier baseline --step classify
+# Run evaluation
 cip-classifier evaluate
 
 # Override config for Vista HPC
-cip-classifier baseline -c configs/vista.yaml
+cip-classifier finetune -c configs/vista.yaml
 
 # Generate synthetic abstracts (requires LLM inference server)
 cip-classifier generate -c configs/generate.yaml
-
-# Train classifier on synthetic data
-cip-classifier train -c configs/train.yaml
 ```
 
 If `configs/default.yaml` exists, it's loaded automatically. Additional `-c` flags
@@ -61,15 +57,35 @@ bash slurm/setup_env.sh
 ### Submit jobs
 
 ```bash
-# Full baseline pipeline (single GH node)
-sbatch -A <alloc> slurm/run_pipeline.sbatch
+# Hyperparameter sweep (SciBERT, 47 configs)
+sbatch -A <alloc> slurm/run_sweep.sbatch
 
-# Generate synthetic data (9 nodes, DeepSeek-R1 671B)
-sbatch -A <alloc> slurm/generate_multinode.sbatch
+# Fine-tune SciBERT (single config)
+sbatch -A <alloc> slurm/run_finetune.sbatch
 
-# Train classifier (single node)
-sbatch -A <alloc> slurm/train.sbatch
+# Train detailed-field model (315 classes)
+sbatch -A <alloc> slurm/run_detailed_finetune.sbatch
+
+# Hierarchical inference (major + detailed)
+sbatch -A <alloc> slurm/run_hierarchical.sbatch
 ```
+
+## Key Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/sweep_finetune.py` | Hyperparameter sweep over SciBERT configs |
+| `scripts/run_detailed_finetune.py` | Train SciBERT on 315 detailed CIP fields |
+| `scripts/run_hierarchical_inference.py` | Combine major + detailed models via constrained decoding |
+| `scripts/generate_charts.py` | Generate publication-quality result charts |
+| `scripts/build_silver_labels.py` | Build pseudo-labels from model consensus |
+| `scripts/audit_labels.py` | Analyze DB label noise vs. model predictions |
+| `scripts/eval_clean.py` | Evaluate on trusted (model+DB agreement) subset |
+| `scripts/analyze_sweep.py` | Analyze and rank sweep results |
+| `scripts/evaluate.py` | Run standard evaluation metrics |
+| `scripts/prepare_data.py` | Prepare CIP taxonomy and training data |
+| `scripts/generate_abstracts.py` | Generate synthetic training abstracts |
+| `scripts/train_classifier.py` | Train classifier (legacy entry point) |
 
 ## Project Structure
 
@@ -80,38 +96,56 @@ sbatch -A <alloc> slurm/train.sbatch
 │   ├── train.yaml               # Classifier training params
 │   └── vista.yaml               # TACC Vista HPC overrides
 ├── scripts/                     # Standalone entry points (for SLURM)
+│   ├── sweep_finetune.py        # C4: hyperparameter sweep
+│   ├── run_detailed_finetune.py # C5a: detailed-field training
+│   ├── run_hierarchical_inference.py  # C5b: constrained decoding
+│   ├── generate_charts.py       # Publication charts
+│   └── ...                      # Data prep, evaluation, silver labels
 ├── src/cip_classifier/          # Library + CLI
 │   ├── __main__.py              # Click CLI (cip-classifier command)
 │   ├── config.py                # Pydantic config loading
 │   ├── utils.py                 # Encoding, FAISS I/O, model loading
 │   ├── data/                    # Taxonomy parsing, splitting
 │   ├── generation/              # LLM abstract generation pipeline
-│   ├── models/                  # Classifier implementations
-│   ├── baselines/               # FAISS retrieval baseline
+│   ├── models/                  # SetFit model implementation
+│   ├── baselines/               # FAISS retrieval + SciBERT fine-tune
 │   └── evaluation/              # Metrics, comparison
 ├── slurm/                       # SLURM job scripts for Vista
+│   ├── run_sweep.sbatch         # Hyperparameter sweep
+│   ├── run_finetune.sbatch      # Single SciBERT training
+│   ├── run_detailed_finetune.sbatch  # Detailed-field training
+│   └── run_hierarchical.sbatch  # Hierarchical inference
 ├── data/
 │   ├── raw/                     # Input Excel files (gitignored)
 │   ├── processed/               # Taxonomy JSONs, sibling fields
 │   └── generated/               # Synthetic abstracts (gitignored)
 ├── output/                      # All artifacts (gitignored)
 │   ├── models/                  # Trained classifiers
+│   ├── sweep/                   # Sweep results + best models
 │   ├── index/                   # FAISS index + metadata
-│   ├── results/                 # Classification results
-│   └── reports/                 # Evaluation reports
+│   └── reports/                 # Charts, evaluation reports
+├── archive/                     # Superseded code and outputs
+│   ├── baselines/               # B2 TF-IDF, B3 embedding head, B6 zero-shot
+│   ├── scripts/                 # B0 baseline, B1 kNN, old visualize
+│   ├── slurm/                   # Old generation/pipeline scripts
+│   └── output/                  # Old prediction files
+├── docs/                        # Documentation
+│   ├── experiment_results.md    # Full experiment log (B0–C5)
+│   └── execution_plan.md        # Project roadmap (all phases complete)
 └── pyproject.toml
 ```
 
-## Switching Models
+## Experiment History
 
-```yaml
-# configs/experiment_e5.yaml
-models:
-  index_encoder: intfloat/e5-mistral-7b-instruct
-  query_encoder: intfloat/e5-mistral-7b-instruct
-  query_prefix: "query: "
-```
+See [docs/experiment_results.md](docs/experiment_results.md) for the full experiment log. Summary:
 
-```bash
-cip-classifier baseline -c configs/experiment_e5.yaml -c configs/vista.yaml
-```
+| Phase | Description | Key Result |
+|-------|-------------|------------|
+| **B0–B6** | Baseline approaches (FAISS, kNN, TF-IDF, embedding head, SetFit, SciBERT, zero-shot LLM) | Best real TACC: B0 FAISS at 34.3% — synthetic-trained models overfit |
+| **C0** | Repo cleanup, archive B2/B3/B6 | — |
+| **C1** | SetFit bge-large upgrade | Underperformed SciBERT (90.6% vs 92.8%) |
+| **C2** | Label quality audit | ~55% DB label noise rate discovered |
+| **C3** | Silver labels + retraining | 5,327 pseudo-labels; SciBERT → 92.8% major |
+| **C4** | Hyperparameter sweep (47 configs) | **93.96% major** (lr=3e-5, 8ep, freeze8) |
+| **C5a** | Detailed-field SciBERT (315 classes) | 87.94% detailed accuracy |
+| **C5b** | Hierarchical constrained decoding | **88.75% detailed, 94.06% major** |

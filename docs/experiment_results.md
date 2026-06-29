@@ -16,12 +16,18 @@
 | **C3** | **SciBERT + silver labels (5ep)** | **0.9280** | **0.9351** | **0.9049** | 0.3323* | 0.5471* | 0.1911* |
 | C3 | SetFit bge-large + silver | 0.9055 | 0.9213 | 0.7802 | 0.3199* | 0.5280* | 0.1840* |
 | **C4** | **SciBERT lr=3e-5, 8ep + silver** | **0.9396** | **0.9447** | **0.9369** | 0.3334* | 0.5494* | 0.1873* |
+| C5a | SciBERT detailed (315 classes, flat) | 0.8794† | 0.9332† | 0.6992† | — | — | — |
+| **C5b** | **Hierarchical (major × detailed)** | **0.8875†** | **0.9406‡** | **0.7130†** | — | — | — |
 
 *Real TACC metrics measured against DB labels which have ~55% noise. These numbers reflect label noise, not model error.
+†Detailed-field accuracy (315 classes). Broad acc column shows rolled-up broad accuracy for detailed models.
+‡Rolled-up major accuracy from hierarchical inference.
 
 **Targets:** Major ≥ 0.70, Broad ≥ 0.90 on synthetic test — **met** (C4: 93.96% major, 94.47% broad).
+**Detailed-field target:** Detailed accuracy > flat model — **met** (C5b: 88.75% vs C5a: 87.94%).
 
-**Best model:** `output/sweep/models/scibert_scivocab_uncased_lr3e-05_ep8_bs16_ls0.0_wd0.01_linear/`
+**Best model (major field):** `output/sweep/models/scibert_scivocab_uncased_lr3e-05_ep8_bs16_ls0.0_wd0.01_linear_freeze8/`
+**Best model (detailed field):** `output/models/detailed_finetune/`
 Use via: `cip-classifier finetune --model-path <path>` (predict-only, no retraining).
 
 ---
@@ -356,13 +362,68 @@ bge-large + silver labels run: **pending** (sbatch submitted).
 | Broad Acc | 0.9351 | **0.9447** | **+1.0%** |
 | Macro F1 | 0.9049 | **0.9369** | **+3.2%** |
 
-Best model saved to: `output/sweep/models/scibert_scivocab_uncased_lr3e-05_ep8_bs16_ls0.0_wd0.01_linear/`
+Best model saved to: `output/sweep/models/scibert_scivocab_uncased_lr3e-05_ep8_bs16_ls0.0_wd0.01_linear_freeze8/`
+
+**Note:** The best config uses 8 frozen encoder layers (`freeze_layers=8`), hence the `_freeze8` suffix. This is NOT the plain `_linear` variant.
 
 ---
 
-### C5. Hierarchical Classification
+### C5. Detailed-Field Classification & Hierarchical Inference ✅
 
-Not yet started. Will use SciBERT as base model.
+#### C5a. Detailed-Field SciBERT Training
+
+- **Date:** 2026-06-28
+- **Model:** `allenai/scibert_scivocab_uncased`
+- **Method:** Fine-tune SciBERT on 315 detailed CIP fields (standalone script, not using the main pipeline)
+- **Training data:** 16,183 synthetic abstracts only (silver labels lack detailed-field annotations)
+- **Hyperparams:** lr=3e-5, epochs=8, batch_size=16, weight_decay=0.01, warmup_ratio=0.1, freeze_layers=8 (same as C4 best)
+- **Script:** `scripts/run_detailed_finetune.py`
+
+| Level | Accuracy | Macro F1 | Top-3 Acc | Top-5 Acc |
+|-------|----------|----------|-----------|-----------|
+| Detailed (315 classes) | **0.8794** | 0.6992 | 0.9813 | 0.9911 |
+| Major (rolled up) | 0.9277 | 0.9053 | — | — |
+| Broad (rolled up) | 0.9332 | 0.8933 | — | — |
+
+**Notes:**
+- 141 of 315 detailed classes had <10 training samples — the long tail hurts macro F1
+- Rolled-up major accuracy (92.77%) is slightly below flat major model (93.96%) — expected, since detailed model must make finer distinctions
+- Top-3 at 98.1% — correct detailed field almost always in top predictions
+- Model saved to: `output/models/detailed_finetune/`
+
+#### C5b. Hierarchical Constrained Decoding
+
+- **Date:** 2026-06-28
+- **Method:** Combine C4 major-field model + C5a detailed-field model via constrained decoding at inference time
+- **Script:** `scripts/run_hierarchical_inference.py`
+
+**Approach:** Use the major-field model's predictions to constrain the detailed-field model's output space. For each abstract:
+1. Major model produces major-field probabilities
+2. Based on the predicted major field(s), mask detailed-field logits to only valid children in the CIP taxonomy
+3. Apply softmax over the constrained logits to get detailed-field predictions
+
+**Four strategies evaluated:**
+
+| Strategy | Description | Detailed Acc | Major Acc (rolled up) |
+|----------|-------------|-------------|----------------------|
+| A: Top-1 mask | Mask to children of top-1 major prediction | 0.8858 | 0.9396 |
+| B: Top-k max | Max detailed prob across top-3 major candidates | 0.5466 | 0.7584 |
+| **C: Combined** | **Score = major_prob × detailed_prob, max over all major fields** | **0.8875** | **0.9406** |
+| D: Weighted | Score = major_prob^α × detailed_prob (α=2.0) | 0.8862 | 0.9401 |
+
+**Winner: Strategy C (combined probability)**
+- Detailed accuracy: **88.75%** (+0.81% over flat detailed model at 87.94%)
+- Rolled-up major accuracy: **94.06%** (+0.10% over flat major model at 93.96%)
+- Both levels improve simultaneously — hierarchical constraints help
+- Strategy B broken: softmax over fewer classes produces artificially high probabilities for rare major fields
+
+#### C5 Summary
+
+| Model | Detailed Acc | Major Acc | Macro F1 |
+|-------|-------------|-----------|----------|
+| Major-field SciBERT (C4, flat) | — | 93.96% | 0.937 |
+| Detailed-field SciBERT (C5a, flat) | 87.94% | 92.77% (rolled up) | 0.699 |
+| **Hierarchical C (C5b, combined)** | **88.75%** | **94.06%** (rolled up) | **0.713** |
 
 ---
 
