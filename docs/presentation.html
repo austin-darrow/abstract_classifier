@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CIP Classifier — Current Status</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #1a1a1a;
+    line-height: 1.7;
+    font-size: 15px;
+    background: #fff;
+  }
+
+  .container {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 40px 24px 64px;
+  }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .subtitle {
+    font-size: 15px;
+    color: #666;
+    margin-bottom: 32px;
+  }
+
+  h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-top: 48px;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid #eee;
+  }
+
+  h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-top: 28px;
+    margin-bottom: 8px;
+  }
+
+  p { margin-bottom: 16px; }
+
+  /* Key metrics banner */
+  .metrics-banner {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin: 24px 0;
+  }
+
+  .metric-card {
+    background: #f0f7ff;
+    border: 1px solid #d0e3f7;
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+  }
+
+  .metric-card .value {
+    font-size: 32px;
+    font-weight: 700;
+    color: #1a5fb4;
+  }
+
+  .metric-card .label {
+    font-size: 12px;
+    color: #555;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  /* Chart/image containers */
+  .chart-box {
+    background: #f8f8fa;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 24px 0;
+    border: 1px solid #e8e8ec;
+  }
+
+  .chart-box .chart-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .chart-box canvas {
+    width: 100% !important;
+    height: 300px !important;
+  }
+
+  .chart-box img {
+    width: 100%;
+    border-radius: 4px;
+  }
+
+  /* Example cards */
+  .example-card {
+    background: #fff;
+    border: 1px solid #e0e0e4;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 16px 0;
+  }
+
+  .example-card .source-tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    margin-bottom: 10px;
+  }
+
+  .example-card .source-tag.synthetic {
+    background: #e8f5e9;
+    color: #2e7d32;
+  }
+
+  .example-card .source-tag.real {
+    background: #fff3e0;
+    color: #e65100;
+  }
+
+  .example-card .abstract-text {
+    font-size: 13px;
+    color: #444;
+    line-height: 1.6;
+    margin-bottom: 12px;
+    font-style: italic;
+  }
+
+  .prediction-result {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  .prediction-result .field-name {
+    font-weight: 600;
+    font-size: 14px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .confidence-bar-bg {
+    width: 120px;
+    height: 8px;
+    background: #e8e8ec;
+    border-radius: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .confidence-bar-fill {
+    height: 100%;
+    background: #4caf50;
+    border-radius: 4px;
+  }
+
+  .confidence-pct {
+    font-size: 13px;
+    font-weight: 500;
+    color: #666;
+    width: 45px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .pred-hierarchy {
+    font-size: 12px;
+    color: #888;
+    margin-top: 4px;
+  }
+
+  /* Info boxes */
+  .info-box {
+    background: #fffde7;
+    border: 1px solid #f0e68c;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+
+  .info-box strong { color: #6d4c00; }
+
+  /* How it works diagram */
+  .pipeline-diagram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 24px 0;
+    padding: 20px;
+    background: #f8f8fa;
+    border-radius: 8px;
+    border: 1px solid #e8e8ec;
+  }
+
+  .pipeline-step {
+    background: #fff;
+    border: 2px solid #d0e3f7;
+    border-radius: 8px;
+    padding: 10px 16px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .pipeline-step.highlight {
+    background: #e3f2fd;
+    border-color: #1a5fb4;
+  }
+
+  .pipeline-arrow {
+    font-size: 20px;
+    color: #aaa;
+  }
+
+  /* Table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+
+  th, td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+  }
+
+  th {
+    font-weight: 600;
+    background: #f8f8fa;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #555;
+  }
+
+  tr.winner { background: #f0f7ff; }
+  tr.winner td { font-weight: 500; }
+
+  /* Key points list */
+  .key-points {
+    list-style: none;
+    padding: 0;
+  }
+
+  .key-points li {
+    padding: 8px 0 8px 24px;
+    position: relative;
+    margin-bottom: 4px;
+  }
+
+  .key-points li::before {
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: #1a5fb4;
+    font-weight: 600;
+  }
+
+  ul { padding-left: 22px; margin-bottom: 16px; }
+  li { margin-bottom: 6px; }
+
+  .footer {
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid #eee;
+    font-size: 13px;
+    color: #888;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>CIP Classifier</h1>
+  <div class="subtitle">Automatic classification of research abstracts into CIP taxonomy fields — Status Update, June 2026</div>
+
+  <h2>What is this?</h2>
+  <p>
+    We built a classifier that reads TACC allocation request abstracts and predicts their
+    <strong>field of science</strong> according to the <a href="https://nces.ed.gov/ipeds/cipcode/">CIP taxonomy</a> —
+    the federal standard for categorizing academic programs.
+  </p>
+  <p>
+    The system classifies at three levels: <strong>22 broad fields</strong> (e.g., "Engineering"),
+    <strong>74 major fields</strong> (e.g., "Electrical and computer engineering"), and
+    <strong>315 detailed fields</strong> (e.g., "Computer Engineering, General").
+  </p>
+
+  <h2>Key Results</h2>
+
+  <div class="metrics-banner">
+    <div class="metric-card">
+      <div class="value">94.1%</div>
+      <div class="label">Major Field Accuracy</div>
+    </div>
+    <div class="metric-card">
+      <div class="value">88.8%</div>
+      <div class="label">Detailed Field Accuracy</div>
+    </div>
+    <div class="metric-card">
+      <div class="value">315</div>
+      <div class="label">CIP Fields Covered</div>
+    </div>
+    <div class="metric-card">
+      <div class="value">~0.5s</div>
+      <div class="label">Per-Abstract Inference</div>
+    </div>
+  </div>
+
+  <div class="info-box">
+    <strong>Note on evaluation:</strong> These numbers are measured against a held-out test set.
+    We discovered that existing database labels have a ~55% error rate when checked against
+    the model's predictions + manual review. The classifier is likely more accurate than
+    the current labels in TACC's database.
+  </div>
+
+  <h2>How It Works</h2>
+
+  <div class="pipeline-diagram">
+    <div class="pipeline-step">Abstract Text</div>
+    <div class="pipeline-arrow">→</div>
+    <div class="pipeline-step highlight">Major Field Model<br><small>SciBERT (74 classes)</small></div>
+    <div class="pipeline-arrow">→</div>
+    <div class="pipeline-step highlight">Detailed Field Model<br><small>SciBERT (315 classes)</small></div>
+    <div class="pipeline-arrow">→</div>
+    <div class="pipeline-step">Hierarchical<br>Combination</div>
+    <div class="pipeline-arrow">→</div>
+    <div class="pipeline-step">Prediction<br><small>Major + Detailed + Confidence</small></div>
+  </div>
+
+  <p>
+    The system uses two <a href="https://huggingface.co/allenai/scibert_scivocab_uncased">SciBERT</a> models
+    (a language model trained on scientific papers) — one trained for major-field classification and one for
+    detailed-field classification. At inference time, the major model's predictions
+    <strong>constrain</strong> the detailed model's output space: only detailed fields that are valid
+    children of the predicted major field are considered. This hierarchical approach improves both
+    levels simultaneously.
+  </p>
+
+  <h3>Training Data</h3>
+  <p>
+    Since reliable labeled data didn't exist, we generated <strong>16,183 synthetic training abstracts</strong>
+    using DeepSeek-R1 (a 671B-parameter language model) running on Vista's GH200 GPUs. Each
+    synthetic abstract was adversarially verified against sibling fields to ensure distinctiveness.
+    We then added <strong>5,327 pseudo-labeled real abstracts</strong> where multiple models agreed with
+    high confidence, for a total training set of 21,510 examples.
+  </p>
+
+  <h2>Accuracy Progression</h2>
+  <p>
+    We evaluated 7 different approaches and iterated through 5 improvement phases.
+    Major-field accuracy climbed from 52% to 94% on synthetic test data:
+  </p>
+
+  <div class="chart-box">
+    <div class="chart-title">Major Field Accuracy by Approach</div>
+    <canvas id="progressionChart"></canvas>
+  </div>
+
+  <table>
+    <tr><th>Approach</th><th>Major Acc</th><th>Key Insight</th></tr>
+    <tr><td>B0: Dictionary lookup</td><td>52.2%</td><td>Zero-shot baseline using CIP definitions</td></tr>
+    <tr><td>B5: SciBERT (synth only)</td><td>90.8%</td><td>Fine-tuned language model, synthetic data only</td></tr>
+    <tr><td>C3: + Silver labels</td><td>92.8%</td><td>Added 5,327 high-confidence real abstract pseudo-labels</td></tr>
+    <tr class="winner"><td>C4: + Hyperparameter sweep</td><td>94.0%</td><td>47-config sweep, layer freezing, optimized LR</td></tr>
+    <tr class="winner"><td>C5b: Hierarchical</td><td>94.1%</td><td>Major model constrains detailed model → both improve</td></tr>
+  </table>
+
+  <h2>Per-Field Performance</h2>
+  <p>
+    F1 score for each of the 74 major fields. Most fields achieve >0.90.
+    The handful of low-performing fields (orange/red) are "catch-all" categories
+    like "Engineering technologies" and "Materials sciences" that are inherently
+    ambiguous in the taxonomy.
+  </p>
+
+  <div class="chart-box">
+    <div class="chart-title">Per-Field F1 Score (74 Major Fields)</div>
+    <img src="../output/charts/per_field_f1.png" alt="Per-field F1 scores">
+  </div>
+
+  <h2>Example Predictions</h2>
+
+  <h3>Synthetic Test Abstracts</h3>
+
+  <div class="example-card">
+    <span class="source-tag synthetic">Synthetic</span>
+    <div class="abstract-text">
+      "Construction project management faces persistent challenges in optimizing resource allocation
+      under uncertainty, particularly when integrating real-time environmental, supply chain, and
+      workforce data. Traditional scheduling and risk mitigation approaches often rely on static
+      models that inadequately account for dynamic disruptions such as material shortages, weather
+      variability, or regulatory changes..."
+    </div>
+    <div class="prediction-result">
+      <span class="field-name">Business, other → Business nec</span>
+      <div class="confidence-bar-bg"><div class="confidence-bar-fill" style="width: 99.9%"></div></div>
+      <span class="confidence-pct">99.9%</span>
+    </div>
+    <div class="pred-hierarchy">Broad: Business · Major: Business, other · Detailed: Business nec</div>
+  </div>
+
+  <div class="example-card">
+    <span class="source-tag synthetic">Synthetic</span>
+    <div class="abstract-text">
+      "This project seeks to leverage high-performance computing resources to address computational
+      bottlenecks in optimizing dynamic design workflows for high-resolution digital and print media.
+      As demand grows for complex, data-rich visual content in prepress and digital imaging,
+      traditional desktop publishing tools struggle with latency and scalability..."
+    </div>
+    <div class="prediction-result">
+      <span class="field-name">Communication and journalism → Communication and journalism nec</span>
+      <div class="confidence-bar-bg"><div class="confidence-bar-fill" style="width: 99.9%"></div></div>
+      <span class="confidence-pct">99.9%</span>
+    </div>
+    <div class="pred-hierarchy">Broad: Other non-science and engineering · Major: Communication and journalism · Detailed: Communication and journalism nec</div>
+  </div>
+
+  <h3>Real TACC Abstracts</h3>
+
+  <div class="example-card">
+    <span class="source-tag real">Real TACC</span>
+    <div class="abstract-text">
+      "The Parallel Linear Algebra Package (PLAPACK) project investigates all aspects of the
+      high-performance implementation of linear algebra libraries, including sequential kernels,
+      communication, and parallel algorithms."
+    </div>
+    <div class="prediction-result">
+      <span class="field-name">Electrical and computer engineering</span>
+      <div class="confidence-bar-bg"><div class="confidence-bar-fill" style="width: 98%"></div></div>
+      <span class="confidence-pct">98.0%</span>
+    </div>
+    <div class="pred-hierarchy">Broad: Engineering · DB label: Computer and information sciences, other</div>
+    <div class="info-box" style="margin-top: 8px; font-size: 12px;">
+      <strong>Disagrees with DB label.</strong> PLAPACK is a parallel computing library developed in
+      an ECE department — the classifier's prediction is arguably more accurate than the database label.
+    </div>
+  </div>
+
+  <div class="example-card">
+    <span class="source-tag real">Real TACC</span>
+    <div class="abstract-text">
+      "Development and application of algorithms and software development methods which lead to
+      high productivity in the development of efficient, self-managing computational systems for
+      heterogeneous parallel/distributed computational environments."
+    </div>
+    <div class="prediction-result">
+      <span class="field-name">Computer and information sciences, other</span>
+      <div class="confidence-bar-bg"><div class="confidence-bar-fill" style="width: 99%"></div></div>
+      <span class="confidence-pct">98.8%</span>
+    </div>
+    <div class="pred-hierarchy">Broad: Computer and information sciences · DB label: Computer and information sciences, other ✓</div>
+  </div>
+
+  <h2>Confusion Analysis</h2>
+  <p>
+    Where the model gets confused: primarily between semantically close "other" or "general"
+    categories. The top-20 confused field pairs are shown below — most confusions are between
+    fields a human expert would also find ambiguous.
+  </p>
+
+  <div class="chart-box">
+    <div class="chart-title">Normalized Confusion Matrix (Top 20 Hardest Fields)</div>
+    <img src="../output/charts/confusion_matrix.png" alt="Confusion matrix">
+  </div>
+
+  <h2>Training Dynamics</h2>
+
+  <div class="chart-box">
+    <div class="chart-title">Learning Curve — Loss &amp; Accuracy Over Training</div>
+    <canvas id="learningCurveChart"></canvas>
+  </div>
+
+  <div class="chart-box">
+    <div class="chart-title">Data Scaling — How Much Data Do We Need?</div>
+    <canvas id="scalingChart"></canvas>
+  </div>
+
+  <h2>Key Takeaways</h2>
+
+  <ul class="key-points">
+    <li><strong>94% major-field accuracy</strong> and <strong>89% detailed-field accuracy</strong> across 315 CIP categories</li>
+    <li>The classifier is <strong>more accurate than existing database labels</strong> — DB labels have ~55% disagreement with model consensus + manual review</li>
+    <li>Hierarchical constrained decoding improves both coarse and fine-grained predictions simultaneously</li>
+    <li>Training data was fully synthetic (LLM-generated) + pseudo-labeled real abstracts — no manual annotation required</li>
+    <li>Inference takes ~0.5s per abstract on GPU, suitable for batch or real-time classification</li>
+    <li>Most remaining errors are in inherently ambiguous "other" and "general" catch-all categories</li>
+  </ul>
+
+  <h2>What's Next</h2>
+
+  <ul>
+    <li><strong>Deployment:</strong> FastAPI service on a TACC VM with a web UI for interactive classification and a batch endpoint for bulk processing</li>
+    <li><strong>More training data:</strong> Generate additional synthetic abstracts for the ~15 lowest-performing fields to close the long-tail gap</li>
+    <li><strong>Detailed silver labels:</strong> Use the hierarchical model to pseudo-label real TACC abstracts at the detailed level, then retrain a unified single-model architecture</li>
+    <li><strong>Gold evaluation set:</strong> Manually label 50–100 real abstracts to get an unbiased real-world accuracy measurement</li>
+  </ul>
+
+  <div class="footer">
+    CIP Classifier · TACC · June 2026 · Model: SciBERT + Hierarchical Constrained Decoding
+  </div>
+
+</div>
+
+<script>
+// Approach Progression Chart
+new Chart(document.getElementById('progressionChart'), {
+  type: 'bar',
+  data: {
+    labels: ['B0\nFAISS', 'B1\nkNN', 'B2\nTF-IDF', 'B3\nMLP', 'B4\nSetFit', 'B5\nSciBERT', 'C3\n+Silver', 'C4\nSweep', 'C5b\nHierarch.'],
+    datasets: [{
+      label: 'Major Field Accuracy (%)',
+      data: [52.2, 85.6, 82.2, 88.6, 91.9, 90.8, 92.8, 94.0, 94.1],
+      backgroundColor: [
+        '#93b5f1', '#93b5f1', '#93b5f1', '#93b5f1', '#93b5f1', '#93b5f1',
+        '#5b9cf6', '#2979ff', '#1a5fb4'
+      ],
+      borderRadius: 4,
+      barPercentage: 0.7,
+    }],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => ctx.parsed.y.toFixed(1) + '%'
+        }
+      }
+    },
+    scales: {
+      y: {
+        min: 40,
+        max: 100,
+        ticks: { callback: v => v + '%', color: '#666', font: { size: 12 } },
+        grid: { color: '#e8e8ec' },
+        border: { display: false },
+      },
+      x: {
+        ticks: { color: '#444', font: { size: 11 }, maxRotation: 0 },
+        grid: { display: false },
+        border: { color: '#ccc' },
+      },
+    },
+  },
+});
+
+// Learning Curve Chart
+const lcData = {"epochs":[1,2,3,4,5,6,7,8],"train_loss":[1.9761,0.4267,0.1916,0.1063,0.0596,0.0287,0.0106,0.0031],"val_loss":[0.672,0.315,0.334,0.271,0.278,0.265,0.288,0.294],"val_accuracy":[0.834,0.909,0.911,0.930,0.941,0.945,0.949,0.948]};
+
+new Chart(document.getElementById('learningCurveChart'), {
+  type: 'line',
+  data: {
+    labels: lcData.epochs,
+    datasets: [
+      {
+        label: 'Val Accuracy',
+        data: lcData.val_accuracy.map(v => v * 100),
+        borderColor: '#1a5fb4',
+        backgroundColor: 'rgba(26, 95, 180, 0.1)',
+        fill: true,
+        tension: 0.3,
+        yAxisID: 'y',
+      },
+      {
+        label: 'Train Loss',
+        data: lcData.train_loss,
+        borderColor: '#e65100',
+        borderDash: [5, 3],
+        tension: 0.3,
+        yAxisID: 'y1',
+      },
+      {
+        label: 'Val Loss',
+        data: lcData.val_loss,
+        borderColor: '#f4511e',
+        tension: 0.3,
+        yAxisID: 'y1',
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { position: 'top', align: 'end', labels: { boxWidth: 12, font: { size: 12 } } },
+    },
+    scales: {
+      x: {
+        title: { display: true, text: 'Epoch', font: { size: 12 } },
+        grid: { display: false },
+      },
+      y: {
+        position: 'left',
+        min: 80,
+        max: 100,
+        title: { display: true, text: 'Accuracy (%)', font: { size: 12 } },
+        ticks: { callback: v => v + '%', color: '#1a5fb4' },
+        grid: { color: '#e8e8ec' },
+      },
+      y1: {
+        position: 'right',
+        min: 0,
+        max: 2.1,
+        title: { display: true, text: 'Loss', font: { size: 12 } },
+        ticks: { color: '#e65100' },
+        grid: { display: false },
+      },
+    },
+  },
+});
+
+// Data Scaling Chart
+const dsData = {"fractions":[0.05,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0],"n_samples":[967,1935,3871,5807,7743,9679,11615,13551,15487,17423,19359],"val_accuracy":[0.648,0.774,0.860,0.890,0.905,0.918,0.923,0.932,0.939,0.940,0.944]};
+
+new Chart(document.getElementById('scalingChart'), {
+  type: 'line',
+  data: {
+    labels: dsData.n_samples.map(n => n >= 1000 ? (n/1000).toFixed(1) + 'K' : n),
+    datasets: [{
+      label: 'Validation Accuracy',
+      data: dsData.val_accuracy.map(v => v * 100),
+      borderColor: '#2e7d32',
+      backgroundColor: 'rgba(46, 125, 50, 0.1)',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 4,
+    }],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: ctx => ctx.parsed.y.toFixed(1) + '%' } },
+    },
+    scales: {
+      x: {
+        title: { display: true, text: 'Training Samples', font: { size: 12 } },
+        grid: { display: false },
+      },
+      y: {
+        min: 60,
+        max: 100,
+        title: { display: true, text: 'Accuracy (%)', font: { size: 12 } },
+        ticks: { callback: v => v + '%', color: '#666' },
+        grid: { color: '#e8e8ec' },
+      },
+    },
+  },
+});
+</script>
+</body>
+</html>
