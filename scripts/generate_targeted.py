@@ -222,19 +222,15 @@ def generate(project_root: Path, target_fields: list[str], samples_per_cip: int,
 
 
 def merge(project_root: Path):
-    """Merge targeted abstracts with existing training data.
+    """Merge all training data sources into train_d2.jsonl.
 
-    Creates data/generated/train_d2.jsonl (original train + targeted).
+    Combines: original synthetic + major silver labels + targeted synthetic + detailed silver labels.
     Does NOT overwrite train.jsonl or train_with_silver.jsonl.
     """
     train_path = project_root / "data" / "generated" / "train.jsonl"
     silver_path = project_root / "data" / "generated" / "silver_labels.jsonl"
     targeted_path = project_root / "data" / "generated" / "targeted" / "abstracts_raw.jsonl"
-
-    if not targeted_path.exists():
-        print(f"ERROR: No targeted data found at {targeted_path}")
-        print("Run generation first: python scripts/generate_targeted.py --samples 100")
-        return
+    detailed_silver_path = project_root / "data" / "generated" / "detailed_silver_labels.jsonl"
 
     print("=== Merging Training Data (D2) ===\n")
 
@@ -249,16 +245,33 @@ def merge(project_root: Path):
         silver_records = load_jsonl(silver_path)
         for r in silver_records:
             r.setdefault("source", "silver_label")
-        print(f"Silver labels: {len(silver_records)}")
+        print(f"Major-level silver labels: {len(silver_records)}")
 
-    targeted_records = load_jsonl(targeted_path)
-    for r in targeted_records:
-        r["source"] = "targeted_synthetic"
-    print(f"Targeted synthetic: {len(targeted_records)}")
+    targeted_records = []
+    if targeted_path.exists():
+        targeted_records = load_jsonl(targeted_path)
+        for r in targeted_records:
+            r["source"] = "targeted_synthetic"
+        print(f"Targeted synthetic: {len(targeted_records)}")
+    else:
+        print(f"No targeted data at {targeted_path} (skipping)")
 
-    # Combine: original synthetic + silver + targeted
-    combined = train_records + silver_records + targeted_records
+    detailed_silver_records = []
+    if detailed_silver_path.exists():
+        detailed_silver_records = load_jsonl(detailed_silver_path)
+        for r in detailed_silver_records:
+            r.setdefault("source", "detailed_silver")
+        print(f"Detailed-level silver labels: {len(detailed_silver_records)}")
+    else:
+        print(f"No detailed silver labels at {detailed_silver_path} (skipping)")
+
+    # Combine all sources
+    combined = train_records + silver_records + targeted_records + detailed_silver_records
     print(f"\nTotal combined: {len(combined)}")
+
+    # Count records with detailed_field (usable for single-model training)
+    n_with_detailed = sum(1 for r in combined if r.get("detailed_field"))
+    print(f"Records with detailed_field: {n_with_detailed} ({n_with_detailed*100//len(combined)}%)")
 
     # Save as new file — does NOT overwrite existing
     output_path = project_root / "data" / "generated" / "train_d2.jsonl"
