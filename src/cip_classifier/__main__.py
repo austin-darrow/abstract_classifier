@@ -452,8 +452,9 @@ def setfit(cfg, project_root, train_data, test_data, output_dir, num_iterations,
 @click.option("--epochs", type=int, default=3, help="Training epochs.")
 @click.option("--lr", type=float, default=2e-5, help="Learning rate.")
 @click.option("--batch-size", type=int, default=16, help="Per-device batch size.")
+@click.option("--freeze-layers", type=int, default=0, help="Freeze first N encoder layers.")
 @click.option("--seed", type=int, default=42, help="Random seed for reproducibility.")
-def finetune(cfg, project_root, train_data, test_data, output_dir, model_name, model_path, epochs, lr, batch_size, seed) -> None:
+def finetune(cfg, project_root, train_data, test_data, output_dir, model_name, model_path, epochs, lr, batch_size, freeze_layers, seed) -> None:
     """Run full encoder fine-tune classifier (B5)."""
     from .baselines.finetune import finetune_classify, finetune_predict
     from .evaluation.metrics import compute_metrics, print_metrics
@@ -492,7 +493,7 @@ def finetune(cfg, project_root, train_data, test_data, output_dir, model_name, m
             metrics_real.save(output_dir / f"metrics_{pred_set_real.model_name}_real_tacc.json")
     else:
         # Train + predict mode
-        kwargs = {"epochs": epochs, "lr": lr, "batch_size": batch_size, "seed": seed}
+        kwargs = {"epochs": epochs, "lr": lr, "batch_size": batch_size, "freeze_layers": freeze_layers, "seed": seed}
         if model_name is not None:
             kwargs["model_name_or_path"] = model_name
         if train_data is not None:

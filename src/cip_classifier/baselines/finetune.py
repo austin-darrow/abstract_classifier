@@ -28,6 +28,7 @@ def finetune_classify(
     weight_decay: float = 0.01,
     max_length: int = 512,
     early_stopping_patience: int = 3,
+    freeze_layers: int = 0,
     seed: int = 42,
 ) -> "PredictionSet":
     """Fine-tune a transformer encoder for classification.
@@ -111,6 +112,17 @@ def finetune_classify(
     model = AutoModelForSequenceClassification.from_pretrained(
         model_name_or_path, num_labels=n_classes,
     )
+
+    # Freeze early encoder layers if requested
+    if freeze_layers > 0 and hasattr(model, "bert"):
+        embeddings = model.bert.embeddings
+        for param in embeddings.parameters():
+            param.requires_grad = False
+        for i, layer in enumerate(model.bert.encoder.layer):
+            if i < freeze_layers:
+                for param in layer.parameters():
+                    param.requires_grad = False
+        print(f"  Froze embeddings + first {freeze_layers} encoder layers")
 
     def tokenize_fn(examples):
         return tokenizer(examples["text"], truncation=True, max_length=max_length, padding="max_length")

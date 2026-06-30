@@ -1,13 +1,15 @@
 #!/bin/bash
 #SBATCH -J cip_finetune           # Job name
 #SBATCH -o slurm-finetune-%j.out
+#SBATCH -e slurm-finetune-%j.err
 #SBATCH -p gh                     # Grace-Hopper GPU partition
 #SBATCH -N 1                      # 1 node
 #SBATCH -n 1                      # 1 task
-#SBATCH -t 04:00:00               # 4 hours (3 epochs on 16k abstracts)
+#SBATCH -t 04:00:00               # 4 hours
 #SBATCH --mail-type=end,fail
 #
-# B5: Full encoder fine-tune (SciBERT) with classification head
+# D2: Retrain two-model SciBERT with D2 data (targeted + silver labels)
+# Best hyperparams from Phase C: freeze_layers=8, lr=3e-5, epochs=8
 #
 # Usage:
 #   sbatch slurm/run_finetune.sbatch
@@ -19,16 +21,28 @@ module load gcc cuda python3
 source "${SCRATCH}/envs/cip_classifier/bin/activate"
 cd "${SLURM_SUBMIT_DIR:-$(dirname "$0")/..}"
 
-echo "=== B5: Full Fine-Tune (SciBERT) ==="
+echo "=== D2: Two-Model Fine-Tune (SciBERT + D2 data) ==="
 echo "Node: $(hostname)"
 echo "GPU:  $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'N/A')"
 echo "Date: $(date)"
 echo ""
 
+TRAIN_DATA="${TRAIN_DATA:-data/generated/train_d2.jsonl}"
+echo "Training data: ${TRAIN_DATA}"
+wc -l "${TRAIN_DATA}"
+echo ""
+
 cip-classifier finetune \
     -c configs/default.yaml -c configs/vista.yaml -c configs/train.yaml \
-    --train-data data/generated/train_with_silver.jsonl \
-    --epochs 5
+    --train-data "${TRAIN_DATA}" \
+    --epochs 8 \
+    --lr 3e-5 \
+    --freeze-layers 8
 
 echo ""
-echo "B5 Fine-tune completed: $(date)"
+echo ">>> Generating comparison charts..."
+cip-classifier compare \
+    -c configs/default.yaml -c configs/vista.yaml
+
+echo ""
+echo "D2 Fine-tune completed: $(date)"
