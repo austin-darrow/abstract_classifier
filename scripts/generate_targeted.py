@@ -109,8 +109,13 @@ def list_fields(project_root: Path, target_fields: list[str]):
             print(f"  {field}: {n} samples")
 
 
-def generate(project_root: Path, target_fields: list[str], samples_per_cip: int, config_paths: list[Path] | None, server_url: str | None = None):
-    """Generate abstracts for target fields using existing pipeline."""
+def generate(project_root: Path, target_fields: list[str], samples_per_cip: int, config_paths: list[Path] | None, server_url: str | None = None, target_per_field: int | None = None):
+    """Generate abstracts for target fields using existing pipeline.
+
+    If target_per_field is set, calculates per-CIP samples dynamically for each
+    field so total (existing_train + targeted) ≈ target_per_field per major field.
+    Falls back to samples_per_cip if target_per_field is not set.
+    """
     from cip_classifier.config import load_config
     from cip_classifier.generation.pipeline import (
         build_detailed_fields_map,
@@ -125,6 +130,7 @@ def generate(project_root: Path, target_fields: list[str], samples_per_cip: int,
     )
     import asyncio
     import httpx
+    import math
 
     # Load config
     if not config_paths:
@@ -140,9 +146,41 @@ def generate(project_root: Path, target_fields: list[str], samples_per_cip: int,
     # Get target CIP programs
     taxonomy_path = project_root / "data" / "processed" / "SEDCIP24.json"
     target_cips = get_target_cips(taxonomy_path, target_fields)
-    print(f"\nTotal CIP programs to generate for: {len(target_cips)}")
-    print(f"Samples per CIP: {samples_per_cip}")
-    print(f"Expected output: ~{len(target_cips) * samples_per_cip} abstracts\n")
+
+    # Calculate per-field CIP counts
+    cips_per_field: dict[str, int] = Counter(
+        cip["Major_Field_label"] for cip in target_cips
+    )
+
+    # If target_per_field is set, calculate how many samples each field needs
+    if target_per_field:
+        # Load existing training data to see current counts
+        train_path = project_root / "data" / "generated" / "train.jsonl"
+        existing_train = load_jsonl(train_path) if train_path.exists() else []
+        train_counts = Counter(r.get("major_field", "") for r in existing_train)
+
+        samples_per_field: dict[str, int] = {}
+        print(f"\nTarget per major field: {target_per_field}")
+        print(f"{'Field':<55} {'Have':>5} {'Need':>5} {'CIPs':>5} {'Per CIP':>7}")
+        print("-" * 82)
+        for field in sorted(target_fields):
+            have = train_counts.get(field, 0)
+            need = max(0, target_per_field - have)
+            n_cips = cips_per_field.get(field, 0)
+            per_cip = math.ceil(need / n_cips) if n_cips > 0 else 0
+            samples_per_field[field] = per_cip
+            print(f"  {field:<53} {have:>5} {need:>5} {n_cips:>5} {per_cip:>7}")
+
+        total_expected = sum(
+            samples_per_field.get(cip["Major_Field_label"], 0) * cips_per_field.get(cip["Major_Field_label"], 0)
+            for cip in {c["Major_Field_label"]: c for c in target_cips}.values()
+        )
+        print(f"\nExpected total new abstracts: ~{total_expected}")
+    else:
+        samples_per_field = None
+        print(f"\nTotal CIP programs to generate for: {len(target_cips)}")
+        print(f"Samples per CIP: {samples_per_cip}")
+        print(f"Expected output: ~{len(target_cips) * samples_per_cip} abstracts")
 
     # Output to targeted/ subdirectory
     output_dir = project_root / "data" / "generated" / "targeted"
@@ -161,8 +199,10 @@ def generate(project_root: Path, target_fields: list[str], samples_per_cip: int,
     # Filter to CIPs that still need generation
     cips_to_generate = []
     for cip in target_cips:
+        field = cip["Major_Field_label"]
+        per_cip = samples_per_field[field] if samples_per_field else samples_per_cip
         done = existing_by_cip.get(cip.get("SED_CIPTitle", ""), 0)
-        remaining = samples_per_cip - done
+        remaining = per_cip - done
         if remaining > 0:
             cips_to_generate.extend([cip] * remaining)
 
@@ -296,7 +336,8 @@ def merge(project_root: Path):
 
 def main():
     parser = argparse.ArgumentParser(description="D2.1: Generate targeted training data for low-F1 fields")
-    parser.add_argument("--samples", type=int, default=100, help="Samples per CIP program (default: 100)")
+    parser.add_argument("--samples", type=int, default=100, help="Samples per CIP program (default: 100, ignored if --target-per-field set)")
+    parser.add_argument("--target-per-field", type=int, default=None, help="Target total samples per major field (calculates per-CIP dynamically)")
     parser.add_argument("--fields", nargs="+", default=None, help="Override target fields (space-separated)")
     parser.add_argument("--config", "-c", nargs="+", type=Path, default=None, help="Config YAML file(s)")
     parser.add_argument("--server-url", type=str, default=None, help="Override vLLM server URL")
@@ -312,7 +353,7 @@ def main():
     elif args.merge:
         merge(project_root)
     else:
-        generate(project_root, target_fields, args.samples, args.config, args.server_url)
+        generate(project_root, target_fields, args.samples, args.config, args.server_url, target_per_field=args.target_per_field)
 
 
 if __name__ == "__main__":

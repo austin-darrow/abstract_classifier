@@ -56,7 +56,7 @@ MASTER_NODE=$(scontrol show hostname "$SLURM_NODELIST" | head -n1)
 MASTER_PORT=5000
 SERVER_PORT=30000
 NUM_NODES=$SLURM_NNODES
-SAMPLES_PER_CIP="${SAMPLES_PER_CIP:-100}"
+TARGET_PER_FIELD="${TARGET_PER_FIELD:-300}"
 
 echo "============================================="
 echo "D2.1: Targeted Abstract Generation"
@@ -65,7 +65,7 @@ echo "Job ID:      $SLURM_JOB_ID"
 echo "Nodes:       $NUM_NODES"
 echo "Master:      $MASTER_NODE"
 echo "API port:    $SERVER_PORT"
-echo "Samples/CIP: $SAMPLES_PER_CIP"
+echo "Target/field: $TARGET_PER_FIELD"
 echo "Model:       deepseek-ai/DeepSeek-R1"
 echo "Precision:   FP8"
 echo "Date:        $(date)"
@@ -173,11 +173,11 @@ fi
 # ---------------------------------------------------------------------------
 
 echo ""
-echo ">>> Starting targeted abstract generation (${SAMPLES_PER_CIP} samples/CIP)..."
+echo ">>> Starting targeted abstract generation (target ${TARGET_PER_FIELD}/field)..."
 echo ""
 
 python scripts/generate_targeted.py \
-    --samples "$SAMPLES_PER_CIP" \
+    --target-per-field "$TARGET_PER_FIELD" \
     --server-url "$SERVER_URL" \
     --config configs/default.yaml configs/generate.yaml
 
