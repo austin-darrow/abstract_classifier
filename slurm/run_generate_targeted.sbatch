@@ -5,7 +5,7 @@
 #SBATCH -p gh                     # Grace-Hopper GPU partition
 #SBATCH -N 9                      # 9 nodes (DeepSeek-R1 671B needs multi-node)
 #SBATCH -n 9                      # 1 task per node
-#SBATCH -t 06:00:00               # 6 hours
+#SBATCH -t 18:00:00               # 18 hours
 #SBATCH --mail-type=end,fail
 #
 # D2.1: Generate additional synthetic abstracts for low-performing fields.

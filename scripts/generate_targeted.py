@@ -186,26 +186,34 @@ def generate(project_root: Path, target_fields: list[str], samples_per_cip: int,
         semaphore = asyncio.Semaphore(cfg.generate.concurrency)
         generated = list(existing)
         debug_log = []
+        completed_count = 0
+        checkpoint_interval = 32  # Save every 32 completions
+
+        async def _process_and_checkpoint(cip):
+            nonlocal completed_count
+            cip_title = cip.get("CIP_Title", "")
+            sibling_info = sibling_map.get(cip.get("Major_Field_label", ""), {})
+            result = await process_cip_program(
+                cip, sibling_info, cfg, semaphore, client,
+                served_model, debug_log, detailed_fields_map,
+            )
+            if isinstance(result, dict):
+                generated.append(result)
+                completed_count += 1
+                if completed_count % checkpoint_interval == 0:
+                    pipeline_save_jsonl(generated, str(output_path))
+                    print(f"  [Checkpoint] {completed_count} new, {len(generated)} total saved")
+            return result
 
         async with httpx.AsyncClient(timeout=cfg.generate.request_timeout) as client:
-            tasks = []
-            for cip in cips_to_generate:
-                cip_title = cip.get("CIP_Title", "")
-                sibling_info = sibling_map.get(cip.get("Major_Field_label", ""), {})
-                task = process_cip_program(
-                    cip, sibling_info, cfg, semaphore, client,
-                    served_model, debug_log, detailed_fields_map,
-                )
-                tasks.append(task)
-
+            tasks = [_process_and_checkpoint(cip) for cip in cips_to_generate]
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            for r in results:
-                if isinstance(r, dict):
-                    generated.append(r)
-                elif isinstance(r, Exception):
-                    print(f"  Error: {r}")
 
-        # Deduplicate and save
+            errors = sum(1 for r in results if isinstance(r, Exception))
+            if errors:
+                print(f"  {errors} tasks failed")
+
+        # Final save (deduplicated)
         generated = deduplicate(generated)
         pipeline_save_jsonl(generated, str(output_path))
         if debug_log:
