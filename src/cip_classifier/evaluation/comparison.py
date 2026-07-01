@@ -9,9 +9,15 @@ from .predictions import PredictionSet
 
 
 def load_all_predictions(results_dir: Path) -> list[PredictionSet]:
-    """Load all prediction JSON files from a directory."""
+    """Load all prediction JSON files from a directory.
+
+    Skips files that don't follow the standard PredictionSet format
+    (e.g. *_clean_eval.json which are evaluation reports, not prediction sets).
+    """
     pred_sets = []
     for path in sorted(results_dir.glob("predictions_*.json")):
+        if "_clean_eval" in path.name:
+            continue
         pred_sets.append(PredictionSet.load(path))
     return pred_sets
 
