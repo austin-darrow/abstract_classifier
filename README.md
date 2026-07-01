@@ -2,17 +2,17 @@
 
 Classify research abstracts against the [CIP taxonomy](https://nces.ed.gov/ipeds/cipcode/) for field-of-science reporting. Built for TACC HPC allocation request abstracts.
 
-Trains on LLM-generated synthetic abstracts + high-confidence pseudo-labels from real TACC data. Uses SciBERT fine-tuning with hierarchical constrained decoding for both major-field (74 classes) and detailed-field (315 classes) classification.
+Trains on LLM-generated synthetic abstracts + high-confidence pseudo-labels from real TACC data. Uses a single unified SciBERT model (315 detailed classes) with logit marginalization for major-field predictions.
 
 ## Current Results
 
 | Model | Detailed Acc | Major Acc | Macro F1 |
 |-------|-------------|-----------|----------|
-| Major-field SciBERT (C4 sweep best) | — | 93.96% | 0.937 |
-| Detailed-field SciBERT (flat) | 87.94% | 92.77% | 0.699 |
-| **Hierarchical (major × detailed)** | **88.75%** | **94.06%** | **0.713** |
+| **Single unified model (D2c, Strategy C)** | **87.3%** | **93.0%** | **0.926** |
+| Hierarchical two-model (D2b) | — | 94.1% | 0.936 |
+| C4 sweep best (pre-D2 data) | — | 94.0% | 0.937 |
 
-All metrics on synthetic test set (n=4,054). Real TACC DB labels have ~55% noise rate, making traditional accuracy metrics against them unreliable. See [docs/experiment_results.md](docs/experiment_results.md) for full results.
+All metrics on synthetic test set (n=4,054). Real TACC DB labels have ~55% noise rate, making traditional accuracy metrics against them unreliable. See [docs/project_report.md](docs/project_report.md) for the full project report.
 
 ## Quick Start
 
@@ -130,14 +130,15 @@ sbatch -A <alloc> slurm/run_hierarchical.sbatch
 │   ├── slurm/                   # Old generation/pipeline scripts
 │   └── output/                  # Old prediction files
 ├── docs/                        # Documentation
-│   ├── experiment_results.md    # Full experiment log (B0–C5)
-│   └── execution_plan.md        # Project roadmap (all phases complete)
+│   ├── project_report.md        # Full project report (methods, results, decisions)
+│   ├── presentation.html        # Interactive presentation for TACC staff
+│   └── sprint_review.html       # Sprint review presentation
 └── pyproject.toml
 ```
 
 ## Experiment History
 
-See [docs/experiment_results.md](docs/experiment_results.md) for the full experiment log. Summary:
+See [docs/project_report.md](docs/project_report.md) for the full project report. Summary:
 
 | Phase | Description | Key Result |
 |-------|-------------|------------|
