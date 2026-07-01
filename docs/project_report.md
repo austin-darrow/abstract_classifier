@@ -24,6 +24,118 @@ Existing database labels for TACC abstracts have a ~55% noise rate (see §3.2), 
 
 All metrics on synthetic test (n=4,054). The **single unified model** was selected for deployment — 1% behind hierarchical but only requires one model to serve.
 
+### How the Classifier Works
+
+This section explains the deployed model end-to-end, from input text to final prediction.
+
+#### What is SciBERT?
+
+[SciBERT](https://github.com/allenai/scibert) is a pretrained language model built on the BERT architecture. Like BERT, it reads text and produces dense vector representations that capture semantic meaning. What makes SciBERT special is that it was pretrained on 1.14 million scientific papers from Semantic Scholar (covering computer science and biomedical domains), so it already "understands" scientific language before we ever train it on our task.
+
+Under the hood, SciBERT is a 12-layer transformer encoder with ~110M parameters. It processes text as sequences of tokens (subword pieces from a vocabulary of 30,522 scientific terms) and outputs a 768-dimensional vector for each token. The special `[CLS]` token's vector at the end represents the "meaning" of the entire input and is what we use for classification.
+
+#### Architecture
+
+Our model takes SciBERT and adds a **classification head** on top — a single linear layer that maps the 768-dimensional `[CLS]` vector to **315 output logits** (one for each detailed CIP field in the taxonomy).
+
+```
+Input abstract (raw text)
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│  Tokenizer                              │
+│  Split text into subword tokens         │
+│  (max 512 tokens)                       │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│  SciBERT Encoder (12 transformer layers)│
+│                                         │
+│  Layers 0–7: FROZEN (not updated)       │
+│  Layers 8–11: FINE-TUNED on our data    │
+│                                         │
+│  Output: 768-dim vector for [CLS] token │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│  Classification Head                    │
+│  Linear: 768 → 315                      │
+│  (one logit per detailed CIP field)     │
+└─────────────────────────────────────────┘
+    │
+    ▼
+315 raw logits
+```
+
+**Why freeze layers 0–7?** The early layers of SciBERT capture general language features (grammar, word meaning) that are already well-learned from pretraining. Freezing them prevents overfitting on our relatively small training set (~23K abstracts). Only the top 4 layers + classification head are updated during training, which acts as a regularizer and was empirically the best configuration from our 47-config hyperparameter sweep.
+
+#### Training
+
+The model is trained with standard cross-entropy loss: given an abstract, the correct detailed field should have the highest logit. Training hyperparameters:
+
+- **Learning rate:** 3e-5 (with linear warmup over 10% of training, then linear decay)
+- **Epochs:** 8 passes over the training data
+- **Batch size:** 16 abstracts per gradient step
+- **Training data:** 23,303 abstracts (synthetic + silver-labeled real) that have a `detailed_field` annotation
+
+After 8 epochs, the model achieves 90.3% validation accuracy on the 315-class task.
+
+#### Inference: How a Prediction is Made
+
+At inference time, a single forward pass through the model produces 315 logits. The prediction pipeline then works in three steps:
+
+**Step 1 — Softmax over detailed fields:**
+
+Apply softmax to convert the 315 raw logits into a probability distribution:
+
+$$P(\text{detailed}_j) = \frac{e^{z_j}}{\sum_{k=1}^{315} e^{z_k}}$$
+
+This gives us a probability for every detailed field (e.g., P("Computer Engineering, General") = 0.12, P("Electrical Engineering") = 0.08, etc.). These sum to 1.0.
+
+**Step 2 — Marginalize to get major-field probabilities:**
+
+The CIP taxonomy maps every detailed field to exactly one major field. To get the probability of a major field, we simply sum the probabilities of all its children:
+
+$$P(\text{major}_m) = \sum_{j \in \text{children}(m)} P(\text{detailed}_j)$$
+
+For example, if "Electrical and computer engineering" (a major field) has 10 detailed children, we sum those 10 probabilities to get the major-field probability. This is mathematically principled — it's exactly what probability theory says you should do to "marginalize out" the detailed variable.
+
+This gives us 74 major-field probabilities that also sum to 1.0. No separate model needed.
+
+**Step 3 — Strategy C scoring (combined probability):**
+
+Finally, we score each detailed field by multiplying its own probability with its parent major field's marginalized probability:
+
+$$\text{score}(j) = P(\text{major}_{m(j)}) \times P(\text{detailed}_j)$$
+
+The predicted detailed field is the one with the highest score. The predicted major field is its parent in the taxonomy. The predicted broad field is its grandparent.
+
+**Why does Strategy C help?** It acts as a soft consistency constraint. If the model assigns small probabilities to many detailed fields within the same major field (e.g., several Physics subfields each get 5%), those probabilities aggregate into a high major-field probability (e.g., Physics = 30%). Strategy C then boosts all Physics detailed fields by that 30% factor, reinforcing coherent predictions.
+
+Conversely, if a single detailed field has high probability but belongs to an otherwise-unlikely major field, its score gets penalized by the low marginalized major probability. This reduces spurious confident predictions in isolation.
+
+#### Concrete Example
+
+Suppose an abstract about quantum computing produces these top detailed-field probabilities:
+
+| Detailed Field | P(detailed) | Parent Major | P(major) | Score |
+|----------------|------------|--------------|----------|-------|
+| Computer Engineering, General | 0.15 | Electrical and computer eng. | 0.28 | 0.042 |
+| Quantum Computing | 0.12 | Computer science | 0.35 | 0.042 |
+| Computer Science, General | 0.11 | Computer science | 0.35 | 0.039 |
+| Physics, General | 0.10 | Physics | 0.18 | 0.018 |
+
+In this case, "Quantum Computing" and "Computer Engineering, General" tie on score. The model would pick whichever is marginally higher after full precision. Note how Physics—despite having a reasonably high P(detailed) of 0.10—gets suppressed because the overall P(major=Physics) is only 0.18.
+
+#### Summary
+
+- **One model.** SciBERT with 315-class classification head.
+- **One forward pass.** Produces all 315 detailed probabilities in ~1.5s on CPU (or ~0.3s with ONNX).
+- **Three prediction levels for free.** Detailed (315), major (74 via marginalization), and broad (22 via further marginalization) — all from the same 315 logits.
+- **Strategy C.** Multiplies each detailed prob by its parent's marginalized major prob, boosting internally-consistent predictions.
+
 ---
 
 ## 2. Data Pipeline
