@@ -57,8 +57,9 @@ class PredictionSet:
         """Load predictions from a JSON file."""
         with open(path) as f:
             data = json.load(f)
+        valid_keys = {f.name for f in Prediction.__dataclass_fields__.values()}
         predictions = [
-            Prediction(**{k: v for k, v in p.items()})
+            Prediction(**{k: v for k, v in p.items() if k in valid_keys})
             for p in data["predictions"]
         ]
         return cls(
