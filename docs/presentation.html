@@ -361,7 +361,7 @@
     <div class="pipeline-arrow">→</div>
     <div class="pipeline-step">Softmax<br><small>315 probabilities</small></div>
     <div class="pipeline-arrow">→</div>
-    <div class="pipeline-step">Strategy C<br><small>Marginalize + Score</small></div>
+    <div class="pipeline-step">Score &amp; Rank<br><small>Marginalize + Combine</small></div>
   </div>
 
   <h3>How Inference Works (Step by Step)</h3>
@@ -385,12 +385,12 @@
       <td>Sum children to get major-field probs: P(major<sub>m</sub>) = Σ P(detailed<sub>j</sub>) for j ∈ children(m)</td>
     </tr>
     <tr>
-      <td><strong>5. Strategy C</strong></td>
+      <td><strong>5. Score</strong></td>
       <td>Final score = P(major<sub>parent</sub>) × P(detailed<sub>j</sub>). Pick highest score.</td>
     </tr>
   </table>
 
-  <h3>Why Strategy C?</h3>
+  <h3>Why Multiply by Major Probability?</h3>
   <p>
     Multiplying each detailed probability by its parent major's probability acts as a <strong>consistency boost</strong>.
     If the model spreads probability across several subfields of Physics, the marginalized P(Physics) is high,
@@ -478,7 +478,7 @@
     <tr><td>SetFit bge-large + silver</td><td>90.6%</td><td>Underperformed SciBERT; contrastive training harder to optimize at scale</td></tr>
     <tr><td>47-config hyperparameter sweep</td><td>94.0%</td><td>lr=3e-5, 8ep, freeze_layers=8 optimal; DeBERTa 10× slower for &lt;0.2% gain</td></tr>
     <tr><td>Detailed-field SciBERT (315 classes)</td><td>87.9%*</td><td>Long-tail problem: 141 classes with &lt;10 samples</td></tr>
-    <tr><td>Hierarchical two-model (Strategy C)</td><td>94.1%</td><td>P(major) × P(detailed) beats masking and weighted variants</td></tr>
+    <tr><td>Hierarchical two-model</td><td>94.1%</td><td>P(major) × P(detailed) beats masking and weighted variants</td></tr>
     <tr><td>Targeted generation (14 weak fields)</td><td>—</td><td>Dynamic per-field caps prevent class imbalance; avg +7% F1 on targets</td></tr>
     <tr><td>Detailed silver labels (4,155 records)</td><td>—</td><td>High-confidence hierarchical predictions on real abstracts</td></tr>
     <tr class="winner"><td><strong>Single unified model + marginalization</strong></td><td><strong>93.0%</strong></td><td>One model, one pass, three prediction levels — selected for deployment</td></tr>
@@ -499,7 +499,7 @@
   </p>
 
   <table>
-    <tr><th>Field</th><th>Before D2</th><th>After D2</th><th>Δ</th></tr>
+    <tr><th>Field</th><th>Before</th><th>After</th><th>Δ</th></tr>
     <tr style="background:#e8f5e9"><td>Mechanical engineering</td><td>0.50</td><td>0.86</td><td><strong>+0.36</strong></td></tr>
     <tr style="background:#e8f5e9"><td>Public health</td><td>0.52</td><td>0.70</td><td><strong>+0.18</strong></td></tr>
     <tr style="background:#e8f5e9"><td>Clinical psychology</td><td>0.86</td><td>1.00</td><td><strong>+0.14</strong></td></tr>
@@ -661,7 +661,7 @@
   </ul>
 
   <div class="footer">
-    CIP Classifier · TACC · July 2026 · Model: SciBERT (315 classes) + Strategy C Marginalization
+    CIP Classifier · TACC · July 2026 · Model: SciBERT (315 classes) + Marginalized Scoring
   </div>
 
 </div>
