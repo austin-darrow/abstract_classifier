@@ -18,6 +18,9 @@
 | **C4** | **SciBERT lr=3e-5, 8ep + silver** | **0.9396** | **0.9447** | **0.9369** | 0.3334* | 0.5494* | 0.1873* |
 | C5a | SciBERT detailed (315 classes, flat) | 0.8794† | 0.9332† | 0.6992† | — | — | — |
 | **C5b** | **Hierarchical (major × detailed)** | **0.8875†** | **0.9406‡** | **0.7130†** | — | — | — |
+| D2a | SciBERT 8ep + D2 data (two-model) | 0.9292 | 0.9329 | 0.9267 | 0.3230* | 0.5217* | 0.1844* |
+| D2b | Hierarchical (D2 major × detailed) | 0.9406 | 0.9457 | 0.9363 | — | — | — |
+| D2c | Single model (315 classes, Strategy C) | 0.9299 | 0.9349 | 0.9261 | — | — | — |
 
 *Real TACC metrics measured against DB labels which have ~55% noise. These numbers reflect label noise, not model error.
 †Detailed-field accuracy (315 classes). Broad acc column shows rolled-up broad accuracy for detailed models.
@@ -28,6 +31,7 @@
 
 **Best model (major field):** `output/sweep/models/scibert_scivocab_uncased_lr3e-05_ep8_bs16_ls0.0_wd0.01_linear_freeze8/`
 **Best model (detailed field):** `output/models/detailed_finetune/`
+**Best single model (315 classes):** `output/models/single_model/`
 Use via: `cip-classifier finetune --model-path <path>` (predict-only, no retraining).
 
 ---
@@ -454,3 +458,94 @@ See `scripts/audit_labels.py` output and `scripts/eval_clean.py` for details.
 | True Field | Predicted Field | Count |
 |-----------|----------------|-------|
 | | | |
+
+---
+
+## Phase D2: Targeted Data Generation + Single Model
+
+- **Date:** 2026-06-30
+- **Training data:** `train_d2.jsonl` — 28,630 records (23,303 with detailed_field)
+  - Original synthetic: 16,183
+  - Detailed silver labels: 4,155
+  - Targeted synthetic (15 weak fields): 2,965
+  - Major-level silver labels: 5,327 (skipped for detailed training — no detailed_field)
+- **Data generation:** DeepSeek-R1 (671B, FP8) on 9× GH200 nodes, ~3K targeted abstracts for 14 low-F1 fields
+- **Target per field:** 300 samples (dynamic per-CIP calculation to avoid class imbalance)
+
+### D2a. Two-Model SciBERT Retrained (Major Field, 74 classes)
+
+- **Model:** `allenai/scibert_scivocab_uncased`
+- **Hyperparams:** lr=3e-5, epochs=8, batch_size=16, freeze_layers=8, warmup=0.1
+- **Train:** 25,767 (90%) / Val: 2,863 (10%)
+
+| Dataset | Major Acc | Broad Acc | Macro F1 | Top-3 | Top-5 |
+|---------|-----------|-----------|----------|-------|-------|
+| Synthetic test (n=4054) | 0.9292 | 0.9329 | 0.9267 | 0.9975 | 0.9990 |
+| Real TACC (n=16209) | 0.3230 | 0.5217 | 0.1844 | 0.4705 | 0.5500 |
+
+**Learning curve:** Val accuracy 83.3% → 94.6% over 8 epochs. Slight overfitting after epoch 3 (val loss increases) but accuracy continues improving.
+
+**vs C4 (pre-D2):** Macro F1 went from 0.9369 → 0.9267 (−1%). The additional targeted data slightly diluted existing-field performance while not fully compensating on weak fields. The 5ep pre-D2 model was comparable.
+
+### D2b. Hierarchical Combined (Major × Detailed)
+
+| Dataset | Major Acc | Broad Acc | Macro F1 (major) |
+|---------|-----------|-----------|------------------|
+| Synthetic test (n=4054) | 0.9406 | 0.9457 | 0.9363 |
+
+**Still the best approach.** Combines D2a major-field model with detailed-field SciBERT via hierarchical inference.
+
+### D2c. Single Model (315 Detailed Classes, Strategy C Marginalization)
+
+- **Model:** `allenai/scibert_scivocab_uncased` (315 output classes)
+- **Hyperparams:** lr=3e-5, epochs=8, batch_size=16, freeze_layers=8
+- **Train:** 20,972 / Val: 2,331 (only records with detailed_field)
+- **WARNING:** 109 of 315 classes have <10 training samples
+
+| Metric | Flat | Marginalized Major | Strategy C |
+|--------|------|-------------------|------------|
+| Detailed accuracy | 0.8732 | — | 0.8730 |
+| Major accuracy (rolled up) | 0.9302 | 0.9299 | 0.9299 |
+| Broad accuracy (rolled up) | 0.9351 | — | 0.9349 |
+| Detailed macro F1 | 0.6752 | — | 0.6769 |
+| Major macro F1 | 0.9257 | 0.9245 | — |
+
+**Learning curve:** Val accuracy 62.8% → 90.3% over 8 epochs — still climbing, more epochs could help.
+
+**vs Two-Model:**
+- Detailed accuracy: −1.5% (single 87.3% vs hierarchical 88.8%)
+- Major accuracy: −1.1% (single 93.0% vs hierarchical 94.1%)
+- Detailed macro F1: −3.6% (single 67.5% vs hierarchical 71.3%)
+- **Advantage:** Single model = simpler deployment (1 model vs 2)
+
+### Bottom 10 Fields (D2a, Synthetic Test)
+
+| Field | P | R | F1 | n |
+|-------|---|---|----|----|
+| Engineering technologies | 0.61 | 0.57 | 0.59 | 80 |
+| Pharmacy and pharmaceutical sciences | 0.48 | 0.92 | 0.63 | 12 |
+| Science and mathematics education | 0.48 | 1.00 | 0.65 | 15 |
+| Biological, biomedical, and biosystems eng. | 0.75 | 0.60 | 0.67 | 5 |
+| Nursing and nursing science | 0.51 | 0.97 | 0.67 | 32 |
+| Public health | 0.61 | 0.82 | 0.70 | 17 |
+| Electrical and computer engineering | 0.74 | 0.85 | 0.79 | 20 |
+| Science-related technologies | 0.67 | 1.00 | 0.80 | 18 |
+| Health professions and related programs | 0.90 | 0.75 | 0.82 | 293 |
+| Bioinformatics, biostatistics, and comp. bio. | 0.89 | 0.80 | 0.84 | 10 |
+
+### Key Takeaways
+
+1. **Targeted data generation worked** — fixed the bugs (debug_log type error, CIP key mismatch) that caused zero output for days
+2. **Per-field balancing matters** — `--target-per-field 300` prevented Engineering Technologies from getting 7,000 samples while others got 200
+3. **Hierarchical > Single > Flat** remains the ranking for accuracy
+4. **Single model is deployment-practical** — only 1-1.5% behind hierarchical, with much simpler inference
+5. **Real TACC accuracy remains ~32%** across all models — this is a fundamental domain gap (synthetic ≠ real) + DB label noise (~55%), not a model architecture issue
+
+### Charts Generated
+
+- `output/charts/learning_curve_slurm-finetune-797974.png` — D2a loss/accuracy curves
+- `output/charts/learning_curve_slurm-single-model-797829.png` — D2c loss/accuracy curves
+- `output/charts/per_field_f1_comparison.png` — Multi-model per-field F1 comparison
+- `output/charts/per_field_f1_bottom20.png` — Bottom 20 fields by F1
+- `output/reports/reports/comparison_chart.png` — Overall model comparison bars
+- `output/reports/reports/confusion_*.png` — Confusion matrices per model

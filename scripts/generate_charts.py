@@ -594,6 +594,10 @@ def main():
                         help="Path to prediction JSON for confusion/F1/confidence charts")
     parser.add_argument("--output-dir", type=str, default="output/charts",
                         help="Output directory for charts")
+    parser.add_argument("--slurm-log", type=str, nargs="+", default=None,
+                        help="SLURM .out file(s) to parse for learning curves (no GPU needed)")
+    parser.add_argument("--per-field-compare", action="store_true",
+                        help="Generate multi-model per-field F1 comparison chart")
     args = parser.parse_args()
 
     project_root = find_project_root()
@@ -709,9 +713,208 @@ def main():
     print("=" * 50)
     generate_progression_chart(output_dir)
 
+    # Chart 8: Learning curves from SLURM logs (no GPU)
+    if args.slurm_log:
+        print("\n" + "=" * 50)
+        print("Chart 8: Learning Curves (from SLURM logs)")
+        print("=" * 50)
+        for log_path_str in args.slurm_log:
+            log_path = Path(log_path_str)
+            if not log_path.is_absolute():
+                log_path = project_root / log_path
+            if log_path.exists():
+                print(f"\n  Parsing: {log_path.name}")
+                data = _parse_slurm_log(log_path)
+                print(f"  Found {len(data['train_loss'])} train steps, {len(data['eval_loss'])} eval points")
+                generate_learning_curve_from_log(data, output_dir, title=log_path.stem)
+            else:
+                print(f"  File not found: {log_path}")
+
+    # Chart 9: Multi-model per-field F1 comparison
+    if args.per_field_compare:
+        print("\n" + "=" * 50)
+        print("Chart 9: Per-Field F1 Comparison")
+        print("=" * 50)
+        generate_per_field_comparison(project_root, output_dir)
+
     print(f"\n{'='*50}")
     print(f"All charts saved to: {output_dir}/")
     print(f"{'='*50}")
+
+
+def _parse_slurm_log(log_path: Path) -> dict:
+    """Parse training metrics from a SLURM .out file."""
+    import re
+    train_losses, eval_losses, eval_accs = [], [], []
+    epochs_train, epochs_eval = [], []
+
+    with open(log_path) as f:
+        for line in f:
+            m = re.search(r"\{'loss': '([0-9.]+)'.*?'epoch': '([0-9.]+)'\}", line)
+            if m:
+                train_losses.append(float(m.group(1)))
+                epochs_train.append(float(m.group(2)))
+            m = re.search(r"\{'eval_loss': '([0-9.]+)', 'eval_accuracy': '([0-9.]+)'.*?'epoch': '([0-9.]+)'\}", line)
+            if m:
+                eval_losses.append(float(m.group(1)))
+                eval_accs.append(float(m.group(2)))
+                epochs_eval.append(float(m.group(3)))
+
+    return {
+        "train_loss": train_losses, "train_epoch": epochs_train,
+        "eval_loss": eval_losses, "eval_accuracy": eval_accs, "eval_epoch": epochs_eval,
+    }
+
+
+def generate_learning_curve_from_log(data: dict, output_dir: Path, title: str = ""):
+    """Generate learning curve charts from parsed SLURM log data."""
+    if not data["train_loss"]:
+        print("No training data found to plot.")
+        return
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+    # Train loss with smoothing
+    ax1.plot(data["train_epoch"], data["train_loss"], alpha=0.3, color="#2196F3", linewidth=0.5)
+    window = max(1, len(data["train_loss"]) // 40)
+    if window > 1:
+        smoothed = []
+        for i in range(len(data["train_loss"])):
+            start = max(0, i - window)
+            smoothed.append(sum(data["train_loss"][start:i+1]) / (i - start + 1))
+        ax1.plot(data["train_epoch"], smoothed, color="#2196F3", linewidth=2, label="Train Loss")
+    else:
+        ax1.plot(data["train_epoch"], data["train_loss"], color="#2196F3", linewidth=2, label="Train Loss")
+
+    if data["eval_loss"]:
+        ax1.plot(data["eval_epoch"], data["eval_loss"], "rs-", markersize=6, linewidth=2, label="Val Loss")
+
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("Loss")
+    ax1.set_title("Loss Curves")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+
+    if data["eval_accuracy"]:
+        ax2.plot(data["eval_epoch"], data["eval_accuracy"], "gD-", markersize=8, linewidth=2)
+        for x, y in zip(data["eval_epoch"], data["eval_accuracy"]):
+            ax2.annotate(f"{y:.3f}", (x, y), textcoords="offset points",
+                        xytext=(0, 10), ha="center", fontsize=8)
+        ax2.set_xlabel("Epoch")
+        ax2.set_ylabel("Accuracy")
+        ax2.set_title("Validation Accuracy")
+        ax2.grid(True, alpha=0.3)
+        if data["eval_accuracy"]:
+            ymin = max(0, min(data["eval_accuracy"]) - 0.1)
+            ax2.set_ylim(ymin, 1.0)
+
+    if title:
+        fig.suptitle(title, fontsize=13)
+    plt.tight_layout()
+
+    safe = title.replace(" ", "_").replace("(", "").replace(")", "").replace("/", "_")[:60] if title else "slurm"
+    chart_path = output_dir / f"learning_curve_{safe}.png"
+    plt.savefig(chart_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved: {chart_path}")
+
+
+def generate_per_field_comparison(project_root: Path, output_dir: Path):
+    """Multi-model per-field F1 comparison chart from saved metrics JSONs."""
+    # Look for metrics in multiple locations
+    metrics_dirs = [
+        project_root / "output" / "reports" / "reports",
+        project_root / "output" / "reports",
+        project_root / "output" / "predictions",
+    ]
+
+    all_metrics = {}
+    for d in metrics_dirs:
+        if not d.exists():
+            continue
+        for path in d.glob("metrics_*synthetic_test*.json"):
+            with open(path) as f:
+                data = json.load(f)
+            model = data.get("model_name", path.stem)
+            if data.get("per_field_metrics"):
+                all_metrics[model] = data["per_field_metrics"]
+
+    if not all_metrics:
+        print("No metrics files with per_field_metrics found.")
+        return
+
+    # Select key models for comparison
+    preferred = [
+        "finetune_scibert_scivocab_uncased_8ep",
+        "hierarchical_combined",
+        "single_model_strategy_c",
+        "finetune_scibert_scivocab_uncased_5ep",
+    ]
+    selected = [(m, all_metrics[m]) for m in preferred if m in all_metrics]
+    if not selected:
+        selected = list(all_metrics.items())[:4]
+
+    # Gather all fields
+    all_fields = set()
+    for _, pf in selected:
+        all_fields.update(pf.keys())
+
+    # Sort by average F1
+    field_avg = {}
+    for field in all_fields:
+        scores = [pf.get(field, {}).get("f1", 0) for _, pf in selected]
+        field_avg[field] = sum(scores) / len(scores)
+    sorted_fields = sorted(field_avg.keys(), key=lambda f: field_avg[f])
+
+    fig, ax = plt.subplots(figsize=(12, max(10, len(sorted_fields) * 0.28)))
+    bar_height = 0.8 / len(selected)
+    colors = ["#2196F3", "#4CAF50", "#FF9800", "#9C27B0", "#F44336"]
+
+    for i, (model, pf) in enumerate(selected):
+        f1s = [pf.get(f, {}).get("f1", 0) for f in sorted_fields]
+        offset = (i - len(selected) / 2 + 0.5) * bar_height
+        ax.barh([y + offset for y in range(len(sorted_fields))], f1s,
+                height=bar_height, label=model[:40], color=colors[i % len(colors)], alpha=0.85)
+
+    ax.set_yticks(range(len(sorted_fields)))
+    ax.set_yticklabels([f[:45] for f in sorted_fields], fontsize=7)
+    ax.set_xlabel("F1 Score")
+    ax.set_title("Per-Field F1 Comparison (Synthetic Test)")
+    ax.set_xlim(0, 1.05)
+    ax.axvline(x=0.8, color="red", linestyle="--", alpha=0.4, label="F1=0.80")
+    ax.legend(loc="lower right", fontsize=7)
+    ax.grid(True, alpha=0.2, axis="x")
+    plt.tight_layout()
+
+    chart_path = output_dir / "per_field_f1_comparison.png"
+    plt.savefig(chart_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved: {chart_path}")
+
+    # Also generate bottom-20 zoomed chart for the best model
+    best_model, best_pf = selected[0]
+    sorted_pf = sorted(best_pf.items(), key=lambda x: x[1]["f1"])[:20]
+    fields = [f[0][:45] for f in sorted_pf]
+    f1s = [f[1]["f1"] for f in sorted_pf]
+    supports = [f[1]["support"] for f in sorted_pf]
+    colors_bottom = ["#F44336" if f < 0.5 else "#FF9800" if f < 0.8 else "#4CAF50" for f in f1s]
+
+    fig, ax = plt.subplots(figsize=(10, max(6, len(fields) * 0.35)))
+    ax.barh(range(len(fields)), f1s, color=colors_bottom, alpha=0.85)
+    ax.set_yticks(range(len(fields)))
+    ax.set_yticklabels(fields, fontsize=8)
+    ax.set_xlabel("F1 Score")
+    ax.set_title(f"Bottom 20 Fields — {best_model}")
+    ax.set_xlim(0, 1.05)
+    ax.axvline(x=0.8, color="gray", linestyle="--", alpha=0.4)
+    for i, (f1, n) in enumerate(zip(f1s, supports)):
+        ax.text(f1 + 0.01, i, f"n={n}", va="center", fontsize=7, color="gray")
+    plt.tight_layout()
+
+    chart_path = output_dir / "per_field_f1_bottom20.png"
+    plt.savefig(chart_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved: {chart_path}")
 
 
 if __name__ == "__main__":
