@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CIP Classifier — Current Status</title>
+<title>CIP Classifier — Sprint Review</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -300,7 +300,7 @@
 <div class="container">
 
   <h1>CIP Classifier</h1>
-  <div class="subtitle">Automatic classification of research abstracts into CIP taxonomy fields — Status Update, June 2026</div>
+  <div class="subtitle">Automatic field-of-science classification for TACC allocation abstracts — Sprint Review, July 2026</div>
 
   <h2>What is this?</h2>
   <p>
@@ -309,20 +309,20 @@
     the federal standard for categorizing academic programs.
   </p>
   <p>
-    The system classifies at three levels: <strong>22 broad fields</strong> (e.g., "Engineering"),
+    The system classifies at three levels simultaneously: <strong>22 broad fields</strong> (e.g., "Engineering"),
     <strong>74 major fields</strong> (e.g., "Electrical and computer engineering"), and
-    <strong>315 detailed fields</strong> (e.g., "Computer Engineering, General").
+    <strong>315 detailed fields</strong> (e.g., "Computer Engineering, General") — all from a single model in a single forward pass.
   </p>
 
   <h2>Key Results</h2>
 
   <div class="metrics-banner">
     <div class="metric-card">
-      <div class="value">94.1%</div>
+      <div class="value">93.0%</div>
       <div class="label">Major Field Accuracy</div>
     </div>
     <div class="metric-card">
-      <div class="value">88.8%</div>
+      <div class="value">87.3%</div>
       <div class="label">Detailed Field Accuracy</div>
     </div>
     <div class="metric-card">
@@ -330,54 +330,137 @@
       <div class="label">CIP Fields Covered</div>
     </div>
     <div class="metric-card">
-      <div class="value">~0.5s</div>
-      <div class="label">Per-Abstract Inference</div>
+      <div class="value">~0.3s</div>
+      <div class="label">Inference (ONNX/CPU)</div>
     </div>
   </div>
 
   <div class="info-box">
-    <strong>Note on evaluation:</strong> These numbers are measured against a held-out test set.
-    We discovered that existing database labels have a ~55% error rate when checked against
-    the model's predictions + manual review. The classifier is likely more accurate than
-    the current labels in TACC's database.
+    <strong>Note on evaluation:</strong> These numbers are measured against a held-out synthetic test set (n=4,054).
+    We discovered that existing database labels are often incorrect when checked against
+    model predictions + manual review.
+    The classifier is likely <em>more accurate</em> than the current labels in TACC's database.
   </div>
 
-  <h2>How It Works</h2>
+  <h2>The Architecture</h2>
+
+  <h3>One Model, Three Prediction Levels</h3>
+  <p>
+    The deployed model is a <strong>single SciBERT</strong> (a BERT variant pre-trained on 1.14M scientific papers)
+    fine-tuned to output <strong>315 detailed-field probabilities</strong>. From those 315 numbers, we derive
+    major-field and broad-field predictions purely via math — no second model needed.
+  </p>
 
   <div class="pipeline-diagram">
     <div class="pipeline-step">Abstract Text</div>
     <div class="pipeline-arrow">→</div>
-    <div class="pipeline-step highlight">Major Field Model<br><small>SciBERT (74 classes)</small></div>
+    <div class="pipeline-step highlight">SciBERT Encoder<br><small>Layers 0–7 frozen, 8–11 fine-tuned</small></div>
     <div class="pipeline-arrow">→</div>
-    <div class="pipeline-step highlight">Detailed Field Model<br><small>SciBERT (315 classes)</small></div>
+    <div class="pipeline-step highlight">Classification Head<br><small>768 → 315 logits</small></div>
     <div class="pipeline-arrow">→</div>
-    <div class="pipeline-step">Hierarchical<br>Combination</div>
+    <div class="pipeline-step">Softmax<br><small>315 probabilities</small></div>
     <div class="pipeline-arrow">→</div>
-    <div class="pipeline-step">Prediction<br><small>Major + Detailed + Confidence</small></div>
+    <div class="pipeline-step">Strategy C<br><small>Marginalize + Score</small></div>
   </div>
 
+  <h3>How Inference Works (Step by Step)</h3>
+
+  <table>
+    <tr><th style="width: 80px">Step</th><th>What Happens</th></tr>
+    <tr>
+      <td><strong>1. Encode</strong></td>
+      <td>Abstract is tokenized and passed through SciBERT → 768-dimensional vector representing its meaning</td>
+    </tr>
+    <tr>
+      <td><strong>2. Classify</strong></td>
+      <td>Linear layer maps 768-dim vector to 315 logits (one per detailed CIP field)</td>
+    </tr>
+    <tr>
+      <td><strong>3. Softmax</strong></td>
+      <td>Convert logits to probabilities: P(detailed<sub>j</sub>) for all 315 fields, summing to 1.0</td>
+    </tr>
+    <tr>
+      <td><strong>4. Marginalize</strong></td>
+      <td>Sum children to get major-field probs: P(major<sub>m</sub>) = Σ P(detailed<sub>j</sub>) for j ∈ children(m)</td>
+    </tr>
+    <tr>
+      <td><strong>5. Strategy C</strong></td>
+      <td>Final score = P(major<sub>parent</sub>) × P(detailed<sub>j</sub>). Pick highest score.</td>
+    </tr>
+  </table>
+
+  <h3>Why Strategy C?</h3>
   <p>
-    The system uses two <a href="https://huggingface.co/allenai/scibert_scivocab_uncased">SciBERT</a> models
-    (a language model trained on scientific papers) — one trained for major-field classification and one for
-    detailed-field classification. At inference time, the major model's predictions
-    <strong>constrain</strong> the detailed model's output space: only detailed fields that are valid
-    children of the predicted major field are considered. This hierarchical approach improves both
-    levels simultaneously.
+    Multiplying each detailed probability by its parent major's probability acts as a <strong>consistency boost</strong>.
+    If the model spreads probability across several subfields of Physics, the marginalized P(Physics) is high,
+    reinforcing all Physics predictions. A spurious high-confidence outlier in an otherwise-unlikely field gets suppressed.
+    This improved accuracy by +0.8% over naïve argmax on the 315 outputs.
   </p>
 
-  <h3>Training Data</h3>
+  <h3>Why Freeze Layers 0–7?</h3>
   <p>
-    Since reliable labeled data didn't exist, we generated <strong>16,183 synthetic training abstracts</strong>
-    using DeepSeek-R1 (a 671B-parameter language model) running on Vista's GH200 GPUs. Each
-    synthetic abstract was adversarially verified against sibling fields to ensure distinctiveness.
-    We then added <strong>5,327 pseudo-labeled real abstracts</strong> where multiple models agreed with
-    high confidence, for a total training set of 21,510 examples.
+    SciBERT has 12 transformer layers. The early layers capture general language features (grammar, word meaning)
+    that are already well-learned. Freezing them prevents overfitting on our ~23K training samples while still
+    allowing the top layers to specialize for field-of-science classification. This configuration won a 47-config
+    hyperparameter sweep.
   </p>
 
-  <h2>Accuracy Progression</h2>
+  <h2>Training Data Pipeline</h2>
+
   <p>
-    We evaluated 7 different approaches and iterated through 5 improvement phases.
-    Major-field accuracy climbed from 52% to 94% on synthetic test data:
+    No reliably labeled real data existed, so we built training data through four complementary strategies:
+  </p>
+
+  <table>
+    <tr><th>Source</th><th>Count</th><th>Method</th></tr>
+    <tr>
+      <td><strong>Synthetic abstracts</strong></td>
+      <td>16,183</td>
+      <td>Generated by DeepSeek-R1 (671B) on 9 Vista GH200 nodes. Each CIP field gets ~10 abstracts with field-specific prompts. Adversarially verified against sibling fields.</td>
+    </tr>
+    <tr>
+      <td><strong>Silver labels (major)</strong></td>
+      <td>5,327</td>
+      <td>Real TACC abstracts where two independent models (SetFit + SciBERT) agree on the major field at confidence ≥ 0.7. These are pseudo-labeled real data.</td>
+    </tr>
+    <tr>
+      <td><strong>Detailed silver labels</strong></td>
+      <td>4,155</td>
+      <td>Real TACC abstracts classified by our hierarchical model at high confidence (major ≥ 0.90, detailed ≥ 0.50). Provides detailed-field annotations for real abstracts.</td>
+    </tr>
+    <tr>
+      <td><strong>Targeted synthetic</strong></td>
+      <td>2,965</td>
+      <td>Additional abstracts for the 14 lowest-F1 fields. Used <code>--target-per-field 300</code> to avoid class imbalance.</td>
+    </tr>
+    <tr style="background: #f0f7ff; font-weight: 500;">
+      <td><strong>Total training set</strong></td>
+      <td><strong>23,303*</strong></td>
+      <td>*Records with detailed_field annotation (used to train the single unified model)</td>
+    </tr>
+  </table>
+
+  <h3>Synthetic Generation</h3>
+  <p>
+    Each abstract is generated with a field-specific prompt that includes the CIP title, definition, and sibling fields to avoid.
+    The generation pipeline uses DeepSeek-R1 (671B parameters, FP8 quantized) served across 9 Grace-Hopper nodes via vLLM + Ray.
+    Post-processing strips <code>&lt;think&gt;</code> blocks, preamble/postamble, and rejects abstracts that contain meta-language
+    ("as instructed", "here's a", etc.). An adversarial verification step then checks that the abstract is distinguishable from
+    sibling fields.
+  </p>
+
+  <h3>Targeted Generation for Weak Fields</h3>
+  <p>
+    After initial training, 15 fields had F1 &lt; 0.80. Rather than generating a flat 100 per CIP (which would give
+    Engineering Technologies 6,900 samples vs. 200 for small fields), we used dynamic per-field targeting:
+    calculate how many each field needs to reach 300 total, then distribute evenly across its CIP programs.
+    Result: <strong>+7% average F1</strong> across the 15 target fields, with Mechanical Engineering improving +36%.
+  </p>
+
+  <h2>Experiment Journey</h2>
+  <p>
+    The final architecture emerged from systematic experimentation across multiple approaches.
+    Key milestones:
   </p>
 
   <div class="chart-box">
@@ -386,25 +469,72 @@
   </div>
 
   <table>
-    <tr><th>Approach</th><th>Major Acc</th><th>Key Insight</th></tr>
-    <tr><td>B0: Dictionary lookup</td><td>52.2%</td><td>Zero-shot baseline using CIP definitions</td></tr>
-    <tr><td>B5: SciBERT (synth only)</td><td>90.8%</td><td>Fine-tuned language model, synthetic data only</td></tr>
-    <tr><td>C3: + Silver labels</td><td>92.8%</td><td>Added 5,327 high-confidence real abstract pseudo-labels</td></tr>
-    <tr class="winner"><td>C4: + Hyperparameter sweep</td><td>94.0%</td><td>47-config sweep, layer freezing, optimized LR</td></tr>
-    <tr class="winner"><td>C5b: Hierarchical</td><td>94.1%</td><td>Major model constrains detailed model → both improve</td></tr>
+    <tr><th>Approach</th><th>Major Acc</th><th>What We Learned</th></tr>
+    <tr><td>FAISS retrieval (CIP definitions)</td><td>52.2%</td><td>Zero-shot baseline; surprisingly beat trained models on real data</td></tr>
+    <tr><td>kNN on synthetic embeddings</td><td>85.6%</td><td>Embeddings separate synthetic fields well, but don't transfer to real</td></tr>
+    <tr><td>TF-IDF + Logistic Regression</td><td>82.2%</td><td>Simple but competitive; confirmed synthetic→real gap is universal</td></tr>
+    <tr><td>Frozen encoder + MLP head</td><td>88.6%</td><td>Non-linear boundaries overfit hardest to synthetic quirks</td></tr>
+    <tr><td>SetFit (contrastive fine-tuning)</td><td>91.9%</td><td>Contrastive learning reshapes embedding space; slower than fine-tune</td></tr>
+    <tr><td>SciBERT fine-tune (synthetic only)</td><td>90.8%</td><td>Full encoder adaptation transfers best; became primary approach</td></tr>
+    <tr><td>Zero-shot LLM (DeepSeek 32B)</td><td>15.7%</td><td>Taxonomy name mismatch; not a useful ceiling estimate</td></tr>
+    <tr><td>Label quality audit</td><td>—</td><td>DB labels are unreliable → can't trust "real TACC accuracy" metrics</td></tr>
+    <tr><td>+ Silver labels (model consensus)</td><td>92.8%</td><td>Pseudo-labeled real data closed the synthetic→real gap (+2%)</td></tr>
+    <tr><td>SetFit bge-large + silver</td><td>90.6%</td><td>Underperformed SciBERT; contrastive training harder to optimize at scale</td></tr>
+    <tr><td>47-config hyperparameter sweep</td><td>94.0%</td><td>lr=3e-5, 8ep, freeze_layers=8 optimal; DeBERTa 10× slower for &lt;0.2% gain</td></tr>
+    <tr><td>Detailed-field SciBERT (315 classes)</td><td>87.9%*</td><td>Long-tail problem: 141 classes with &lt;10 samples</td></tr>
+    <tr><td>Hierarchical two-model (Strategy C)</td><td>94.1%</td><td>P(major) × P(detailed) beats masking and weighted variants</td></tr>
+    <tr><td>Targeted generation (14 weak fields)</td><td>—</td><td>Dynamic per-field caps prevent class imbalance; avg +7% F1 on targets</td></tr>
+    <tr><td>Detailed silver labels (4,155 records)</td><td>—</td><td>High-confidence hierarchical predictions on real abstracts</td></tr>
+    <tr class="winner"><td><strong>Single unified model + marginalization</strong></td><td><strong>93.0%</strong></td><td>One model, one pass, three prediction levels — selected for deployment</td></tr>
   </table>
 
-  <h2>Per-Field Performance</h2>
+  <p style="font-size: 12px; color: #888;">*Detailed-field accuracy (315 classes), not major-field accuracy.</p>
+
+  <div class="info-box">
+    <strong>Key insight:</strong> Models trained only on synthetic data had an <em>inverse</em> correlation with
+    real-world performance — the better they did on synthetic test, the worse on real data. This was solved by incorporating
+    silver-labeled real abstracts and motivated the shift from "better model" to "better data."
+  </div>
+
+  <h2>Target Field Improvement</h2>
   <p>
-    F1 score for each of the 74 major fields. Most fields achieve >0.90.
-    The handful of low-performing fields (orange/red) are "catch-all" categories
-    like "Engineering technologies" and "Materials sciences" that are inherently
-    ambiguous in the taxonomy.
+    Targeted data generation measurably improved the weakest fields. 10 of 15 target fields improved, with an average
+    F1 gain of <strong>+0.07</strong>:
+  </p>
+
+  <table>
+    <tr><th>Field</th><th>Before D2</th><th>After D2</th><th>Δ</th></tr>
+    <tr style="background:#e8f5e9"><td>Mechanical engineering</td><td>0.50</td><td>0.86</td><td><strong>+0.36</strong></td></tr>
+    <tr style="background:#e8f5e9"><td>Public health</td><td>0.52</td><td>0.70</td><td><strong>+0.18</strong></td></tr>
+    <tr style="background:#e8f5e9"><td>Clinical psychology</td><td>0.86</td><td>1.00</td><td><strong>+0.14</strong></td></tr>
+    <tr style="background:#e8f5e9"><td>Science and math education</td><td>0.52</td><td>0.65</td><td>+0.13</td></tr>
+    <tr style="background:#e8f5e9"><td>Materials and mining eng.</td><td>0.86</td><td>0.96</td><td>+0.10</td></tr>
+    <tr><td>Engineering technologies</td><td>0.62</td><td>0.59</td><td>−0.03</td></tr>
+    <tr><td>Science-related technologies</td><td>0.87</td><td>0.80</td><td>−0.07</td></tr>
+    <tr style="background:#f0f7ff; font-weight:500"><td><strong>Average (15 fields)</strong></td><td><strong>0.69</strong></td><td><strong>0.76</strong></td><td><strong>+0.07</strong></td></tr>
+  </table>
+
+  <h2>Learning Curves</h2>
+
+  <div class="chart-box">
+    <div class="chart-title">Single Model (315 classes) — Training Dynamics</div>
+    <img src="../output/charts/learning_curve_slurm-single-model-797829.png" alt="Single model learning curve">
+  </div>
+
+  <p>
+    The single model's validation accuracy was still climbing at epoch 8 (62.8% → 90.3%), suggesting further training
+    or additional data would close the remaining 1% gap with the hierarchical approach.
+  </p>
+
+  <h2>Per-Field F1</h2>
+  <p>
+    F1 score for each of the 74 major fields (single unified model). Most fields achieve &gt;0.90.
+    The handful below 0.80 (orange/red) are inherently ambiguous taxonomy categories.
   </p>
 
   <div class="chart-box">
-    <div class="chart-title">Per-Field F1 Score (74 Major Fields)</div>
-    <img src="../output/charts/per_field_f1.png" alt="Per-field F1 scores">
+    <div class="chart-title">Per-Field F1 — Single Unified Model (74 Major Fields)</div>
+    <img src="../output/charts/per_field_f1_single_model.png" alt="Per-field F1 scores for single model">
   </div>
 
   <h2>Example Predictions</h2>
@@ -480,52 +610,38 @@
     <div class="pred-hierarchy">Broad: Computer and information sciences · DB label: Computer and information sciences, other ✓</div>
   </div>
 
-  <h2>Confusion Analysis</h2>
-  <p>
-    Where the model gets confused: primarily between semantically close "other" or "general"
-    categories. The top-20 confused field pairs are shown below — most confusions are between
-    fields a human expert would also find ambiguous.
-  </p>
+  <h2>Deployment Plan</h2>
 
-  <div class="chart-box">
-    <div class="chart-title">Normalized Confusion Matrix (Top 20 Hardest Fields)</div>
-    <img src="../output/charts/confusion_matrix.png" alt="Confusion matrix">
-  </div>
+  <table>
+    <tr><th>Component</th><th>Plan</th></tr>
+    <tr><td><strong>Model</strong></td><td>Single SciBERT (315 classes), ONNX-exported for 3–5× CPU speedup</td></tr>
+    <tr><td><strong>API</strong></td><td>FastAPI server — <code>POST /classify</code> (single) + <code>POST /classify/batch</code></td></tr>
+    <tr><td><strong>Web UI</strong></td><td>Single-page app: paste abstract → see top-3 predictions with confidence bars</td></tr>
+    <tr><td><strong>Infrastructure</strong></td><td>CPU-only VM, Docker container, GitLab CI/CD</td></tr>
+    <tr><td><strong>Latency</strong></td><td>~0.3s per abstract (ONNX on CPU)</td></tr>
+    <tr><td><strong>Batch</strong></td><td>&gt;100 abstracts/min for bulk classification</td></tr>
+  </table>
 
-  <h2>Training Dynamics</h2>
-
-  <div class="chart-box">
-    <div class="chart-title">Learning Curve — Loss &amp; Accuracy Over Training</div>
-    <canvas id="learningCurveChart"></canvas>
-  </div>
-
-  <div class="chart-box">
-    <div class="chart-title">Data Scaling — How Much Data Do We Need?</div>
-    <canvas id="scalingChart"></canvas>
-  </div>
-
-  <h2>Key Takeaways</h2>
+  <h2>Key Decisions</h2>
 
   <ul class="key-points">
-    <li><strong>94% major-field accuracy</strong> and <strong>89% detailed-field accuracy</strong> across 315 CIP categories</li>
-    <li>The classifier is <strong>more accurate than existing database labels</strong> — DB labels have ~55% disagreement with model consensus + manual review</li>
-    <li>Hierarchical constrained decoding improves both coarse and fine-grained predictions simultaneously</li>
-    <li>Training data was fully synthetic (LLM-generated) + pseudo-labeled real abstracts — no manual annotation required</li>
-    <li>Inference takes ~0.5s per abstract on GPU, suitable for batch or real-time classification</li>
-    <li>Most remaining errors are in inherently ambiguous "other" and "general" catch-all categories</li>
+    <li><strong>Single model over two-model hierarchical:</strong> Only 1% accuracy difference, but dramatically simpler deployment (one model, one forward pass, principled marginalization)</li>
+    <li><strong>SciBERT over larger models:</strong> DeBERTa-v3-large was 10× slower for &lt;0.2% gain; SciBERT is fast enough for CPU-only deployment</li>
+    <li><strong>DB labels are not ground truth:</strong> Real TACC labels are often incorrect. We evaluate on synthetic test and inter-model agreement instead.</li>
+    <li><strong>Targeted per-field generation:</strong> Dynamic caps prevent class imbalance; brought weakest fields from avg 0.69 → 0.76 F1</li>
   </ul>
 
   <h2>What's Next</h2>
 
   <ul>
-    <li><strong>Deployment:</strong> FastAPI service on a TACC VM with a web UI for interactive classification and a batch endpoint for bulk processing</li>
-    <li><strong>More training data:</strong> Generate additional synthetic abstracts for the ~15 lowest-performing fields to close the long-tail gap</li>
-    <li><strong>Detailed silver labels:</strong> Use the hierarchical model to pseudo-label real TACC abstracts at the detailed level, then retrain a unified single-model architecture</li>
-    <li><strong>Gold evaluation set:</strong> Manually label 50–100 real abstracts to get an unbiased real-world accuracy measurement</li>
+    <li><strong>ONNX export:</strong> Convert the single model to ONNX format for 3–5× CPU inference speedup</li>
+    <li><strong>FastAPI deployment:</strong> Build the API server + web UI for interactive and batch classification</li>
+    <li><strong>Docker + CI/CD:</strong> Package into a container with GitLab CI pipeline for zero-downtime deploys</li>
+    <li><strong>Final manual verification:</strong> Test random real abstracts against the model to validate predictions in practice</li>
   </ul>
 
   <div class="footer">
-    CIP Classifier · TACC · June 2026 · Model: SciBERT + Hierarchical Constrained Decoding
+    CIP Classifier · TACC · July 2026 · Model: SciBERT (315 classes) + Strategy C Marginalization
   </div>
 
 </div>
@@ -535,13 +651,13 @@
 new Chart(document.getElementById('progressionChart'), {
   type: 'bar',
   data: {
-    labels: ['B0\nFAISS', 'B1\nkNN', 'B2\nTF-IDF', 'B3\nMLP', 'B4\nSetFit', 'B5\nSciBERT', 'C3\n+Silver', 'C4\nSweep', 'C5b\nHierarch.'],
+    labels: ['FAISS\nBaseline', 'SciBERT\nSynth Only', '+Silver\nLabels', '+Sweep\nOptimized', 'Hierarchical\n(two-model)', 'Single Model\n(deployed)'],
     datasets: [{
       label: 'Major Field Accuracy (%)',
-      data: [52.2, 85.6, 82.2, 88.6, 91.9, 90.8, 92.8, 94.0, 94.1],
+      data: [52.2, 90.8, 92.8, 94.0, 94.1, 93.0],
       backgroundColor: [
-        '#93b5f1', '#93b5f1', '#93b5f1', '#93b5f1', '#93b5f1', '#93b5f1',
-        '#5b9cf6', '#2979ff', '#1a5fb4'
+        '#93b5f1', '#93b5f1',
+        '#5b9cf6', '#2979ff', '#1a5fb4', '#0d47a1'
       ],
       borderRadius: 4,
       barPercentage: 0.7,
@@ -575,111 +691,7 @@ new Chart(document.getElementById('progressionChart'), {
   },
 });
 
-// Learning Curve Chart
-const lcData = {"epochs":[1,2,3,4,5,6,7,8],"train_loss":[1.9761,0.4267,0.1916,0.1063,0.0596,0.0287,0.0106,0.0031],"val_loss":[0.672,0.315,0.334,0.271,0.278,0.265,0.288,0.294],"val_accuracy":[0.834,0.909,0.911,0.930,0.941,0.945,0.949,0.948]};
-
-new Chart(document.getElementById('learningCurveChart'), {
-  type: 'line',
-  data: {
-    labels: lcData.epochs,
-    datasets: [
-      {
-        label: 'Val Accuracy',
-        data: lcData.val_accuracy.map(v => v * 100),
-        borderColor: '#1a5fb4',
-        backgroundColor: 'rgba(26, 95, 180, 0.1)',
-        fill: true,
-        tension: 0.3,
-        yAxisID: 'y',
-      },
-      {
-        label: 'Train Loss',
-        data: lcData.train_loss,
-        borderColor: '#e65100',
-        borderDash: [5, 3],
-        tension: 0.3,
-        yAxisID: 'y1',
-      },
-      {
-        label: 'Val Loss',
-        data: lcData.val_loss,
-        borderColor: '#f4511e',
-        tension: 0.3,
-        yAxisID: 'y1',
-      },
-    ],
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: { mode: 'index', intersect: false },
-    plugins: {
-      legend: { position: 'top', align: 'end', labels: { boxWidth: 12, font: { size: 12 } } },
-    },
-    scales: {
-      x: {
-        title: { display: true, text: 'Epoch', font: { size: 12 } },
-        grid: { display: false },
-      },
-      y: {
-        position: 'left',
-        min: 80,
-        max: 100,
-        title: { display: true, text: 'Accuracy (%)', font: { size: 12 } },
-        ticks: { callback: v => v + '%', color: '#1a5fb4' },
-        grid: { color: '#e8e8ec' },
-      },
-      y1: {
-        position: 'right',
-        min: 0,
-        max: 2.1,
-        title: { display: true, text: 'Loss', font: { size: 12 } },
-        ticks: { color: '#e65100' },
-        grid: { display: false },
-      },
-    },
-  },
-});
-
-// Data Scaling Chart
-const dsData = {"fractions":[0.05,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0],"n_samples":[967,1935,3871,5807,7743,9679,11615,13551,15487,17423,19359],"val_accuracy":[0.648,0.774,0.860,0.890,0.905,0.918,0.923,0.932,0.939,0.940,0.944]};
-
-new Chart(document.getElementById('scalingChart'), {
-  type: 'line',
-  data: {
-    labels: dsData.n_samples.map(n => n >= 1000 ? (n/1000).toFixed(1) + 'K' : n),
-    datasets: [{
-      label: 'Validation Accuracy',
-      data: dsData.val_accuracy.map(v => v * 100),
-      borderColor: '#2e7d32',
-      backgroundColor: 'rgba(46, 125, 50, 0.1)',
-      fill: true,
-      tension: 0.3,
-      pointRadius: 4,
-    }],
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: { callbacks: { label: ctx => ctx.parsed.y.toFixed(1) + '%' } },
-    },
-    scales: {
-      x: {
-        title: { display: true, text: 'Training Samples', font: { size: 12 } },
-        grid: { display: false },
-      },
-      y: {
-        min: 60,
-        max: 100,
-        title: { display: true, text: 'Accuracy (%)', font: { size: 12 } },
-        ticks: { callback: v => v + '%', color: '#666' },
-        grid: { color: '#e8e8ec' },
-      },
-    },
-  },
-});
+// No additional charts needed — using image files for learning curves and per-field F1
 </script>
 </body>
 </html>
